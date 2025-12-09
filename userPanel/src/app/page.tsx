@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { socketService } from './services/socket';
+import api from '../config/api';
 import './chat.css';
 
 interface ChatMessage {
@@ -61,12 +62,10 @@ export default function ChatPage() {
     if (!guestId && !userId) return;
 
     try {
-      const query = new URLSearchParams();
-      if (userId) query.append('userId', userId);
-      if (guestId) query.append('guestId', guestId);
-
-      const res = await fetch(`http://localhost:3001/api/chat/sessions?${query.toString()}`);
-      const data = await res.json();
+      const res = await api.get('/api/chat/sessions', {
+        params: { userId, guestId }
+      });
+      const data = res.data;
 
       if (data.success) {
         setAllChats(data.sessions.map((s: any) => ({
@@ -271,7 +270,7 @@ export default function ChatPage() {
     setAllChats(updatedChats);
 
     try {
-      await fetch(`http://localhost:3001/api/chat/sessions/${chatId}`, { method: 'DELETE' });
+      await api.delete(`/api/chat/sessions/${chatId}`);
       showToast('Chat deleted');
     } catch (err) {
       showToast('Failed to delete chat');
