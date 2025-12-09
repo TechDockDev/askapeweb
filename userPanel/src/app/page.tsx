@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { socketService } from './services/socket';
 import api from '../config/api';
 import './chat.css';
+import { useTheme } from '../providers/ThemeProvider';
 
 interface ChatMessage {
   id?: string;
@@ -30,7 +31,7 @@ interface ChatHistory {
 
 export default function ChatPage() {
   const router = useRouter();
-  const [theme, setTheme] = useState('light');
+  const { theme, toggleTheme } = useTheme();
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [currentMessages, setCurrentMessages] = useState<ChatMessage[]>([]);
   const [allChats, setAllChats] = useState<ChatHistory[]>([]);
@@ -82,11 +83,6 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    // Load theme
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-
     // Load user
     const savedUser = localStorage.getItem('user');
     const userData = savedUser ? JSON.parse(savedUser) : null;
@@ -225,12 +221,9 @@ export default function ChatPage() {
   }, [currentMessages]);
 
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    showToast(`${newTheme === 'dark' ? 'Dark' : 'Light'} mode enabled`);
+  const handleThemeToggle = () => {
+    toggleTheme();
+    showToast(`${theme === 'dark' ? 'Light' : 'Dark'} mode enabled`);
   };
 
   const showToast = (message: string) => {
@@ -444,13 +437,6 @@ export default function ChatPage() {
         </div>
 
         <nav className="sidebar-nav">
-          <a href="/settings" className="nav-item">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span className="nav-item-text">Settings</span>
-          </a>
           <a href="/payments" className="nav-item">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -464,7 +450,7 @@ export default function ChatPage() {
             </svg>
             <span className="theme-toggle-label">Dark Mode</span>
             <label className="theme-switch">
-              <input type="checkbox" checked={theme === 'dark'} onChange={toggleTheme} />
+              <input type="checkbox" checked={theme === 'dark'} onChange={handleThemeToggle} />
               <span className="theme-slider"></span>
             </label>
           </div>
@@ -493,8 +479,6 @@ export default function ChatPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <h1 className="header-title">Compare AI Models</h1>
-            <span className="badge">Multi-Model AI</span>
           </div>
           <div className="model-selector">
             {[
