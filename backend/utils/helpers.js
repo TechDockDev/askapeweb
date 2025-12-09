@@ -1,7 +1,10 @@
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 
 let useDatabase = false;
+const JWT_SECRET = process.env.JWT_SECRET || 'askape_secure_secret_key_2024';
 
 // We need to know if DB is used to update tokens correctly
 export const setUseDatabase = (value) => {
@@ -12,12 +15,25 @@ export function generateGuestId() {
     return `guest_${crypto.randomBytes(8).toString('hex')}`;
 }
 
-export function generateToken() {
-    return crypto.randomBytes(32).toString('hex');
+export function generateToken(payload = {}) {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
-export function hashPassword(password) {
-    return crypto.createHash('sha256').update(password + 'askape_salt').digest('hex');
+export function verifyToken(token) {
+    try {
+        return jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+        return null;
+    }
+}
+
+export async function hashPassword(password) {
+    const salt = await bcrypt.genSalt(10);
+    return bcrypt.hash(password, salt);
+}
+
+export async function comparePassword(inputPassword, hashedPassword) {
+    return bcrypt.compare(inputPassword, hashedPassword);
 }
 
 export function estimateTokens(text) {
