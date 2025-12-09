@@ -1,7 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 
+import { API_BASE_URL } from '../../config/api';
+
 // Define the socket URL
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = API_BASE_URL;
 
 // Connection options
 const SOCKET_OPTIONS = {
