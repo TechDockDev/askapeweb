@@ -189,6 +189,23 @@ export default function ChatPage() {
         });
       });
 
+      socket.on('model_error', (data) => {
+        const { modelId, error } = data;
+        setCurrentMessages((prevMessages) => {
+          const newMessages = [...prevMessages];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage) {
+            const response = lastMessage.responses.find(r => r.model === modelId);
+            if (response) {
+              response.error = error;
+              response.isComplete = true; // Mark as complete so loading spinner stops
+            }
+          }
+          return newMessages;
+        });
+        showToast(`Error from model: ${error}`);
+      });
+
       socket.on('all_responses_complete', () => {
         setIsGenerating(false);
         fetchSessions(); // Update list order/titles after chat interaction

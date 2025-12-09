@@ -224,6 +224,8 @@ export default function socketHandler(io) {
                 ? modelIds
                 : AVAILABLE_MODELS.filter(m => m.isDefault).map(m => m.id);
 
+            console.log(`🤖 Processing message for models: ${selectedModels.join(', ')}`);
+
             const promptTokens = estimateTokens(message);
 
             try {
