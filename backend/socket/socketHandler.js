@@ -300,6 +300,7 @@ export default function socketHandler(io) {
                             fullContent += chunk;
                             chunkCount++;
                             socket.emit('message_chunk', {
+                                sessionId,
                                 modelId,
                                 modelName,
                                 chunk,
@@ -313,6 +314,7 @@ export default function socketHandler(io) {
                             fullContent = full;
                             chunkCount++;
                             socket.emit('message_chunk', {
+                                sessionId,
                                 modelId,
                                 modelName,
                                 chunk: full.slice(-chunk.length),
@@ -325,6 +327,7 @@ export default function socketHandler(io) {
                     const responseTokens = estimateTokens(fullContent);
 
                     socket.emit('model_streaming_complete', {
+                        sessionId,
                         modelId,
                         modelName,
                         id: aiResponseId,
@@ -342,7 +345,7 @@ export default function socketHandler(io) {
                     };
 
                 } catch (error) {
-                    socket.emit('model_error', { modelId, modelName, error: error.message });
+                    socket.emit('model_error', { sessionId, modelId, modelName, error: error.message });
                     return { success: false, modelId, error: error.message };
                 }
             });
@@ -400,6 +403,13 @@ export default function socketHandler(io) {
             }
 
             socket.emit('all_responses_complete', { sessionId, modelsCompleted: aiResponses.length });
+        });
+
+        socket.on('leave_session', (sessionId) => {
+            if (sessionId) {
+                socket.leave(sessionId);
+                console.log(`out Client left session: ${sessionId}`);
+            }
         });
 
         socket.on('disconnect', () => {
