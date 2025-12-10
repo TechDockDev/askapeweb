@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { socketService } from './services/socket';
@@ -31,6 +31,7 @@ interface ChatHistory {
 
 export default function ChatPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { theme, toggleTheme } = useTheme();
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [currentMessages, setCurrentMessages] = useState<ChatMessage[]>([]);
@@ -45,16 +46,22 @@ export default function ChatPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const initialLoadDone = useRef(false);
 
   // Refs
   const chatDisplayRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]); // Ref to access latest state in callbacks
+  const currentChatIdRef = useRef<string | null>(null); // Ref for socket handlers
 
   // Sync ref with state
   useEffect(() => {
     messagesRef.current = currentMessages;
   }, [currentMessages]);
+
+  useEffect(() => {
+    currentChatIdRef.current = currentChatId;
+  }, [currentChatId]);
 
   const fetchSessions = async () => {
     const guestId = localStorage.getItem('askape_guest_id');
@@ -88,8 +95,21 @@ export default function ChatPage() {
     const userData = savedUser ? JSON.parse(savedUser) : null;
     setUser(userData);
 
-    // Initial session fetch will happen after socket connects and we have guestId/userId OR if user is already loaded
+    // Initial session fetch
+    // We'll also handle URL chatId here for initial load
   }, []);
+
+  // Handle URL chatId on mount or param change
+  useEffect(() => {
+    if (initialLoadDone.current) return;
+
+    const urlChatId = searchParams.get('chatId');
+    if (urlChatId && urlChatId !== currentChatId) {
+      console.log('Restoring chat from URL:', urlChatId);
+      setCurrentChatId(urlChatId);
+      initialLoadDone.current = true;
+    }
+  }, [searchParams]);
 
   // Fetch sessions when user changes
   useEffect(() => {
@@ -114,22 +134,30 @@ export default function ChatPage() {
         }
       });
 
+      // ... (other listeners same as before) ...
+
       socket.on('session_history', (history: any[]) => {
         console.log('Received history:', history);
-        const formattedHistory: ChatMessage[] = history
-          .filter(msg => msg.role === 'USER') // Filter for user messages to group pairs
-          .map(userMsg => {
-            return {
-              id: userMsg.id,
-              prompt: userMsg.content,
-              responses: userMsg.aiResponses?.map((r: any) => ({
+        const formattedHistory: ChatMessage[] = [];
+
+        for (let i = 0; i < history.length; i++) {
+          const msg = history[i];
+          if (msg.role === 'USER') {
+            const nextMsg = history[i + 1];
+            const aiResponses = (nextMsg && nextMsg.role === 'AI') ? (nextMsg.aiResponses || []) : [];
+
+            formattedHistory.push({
+              id: msg.id,
+              prompt: msg.content,
+              responses: aiResponses.map((r: any) => ({
                 model: r.modelId,
                 modelName: r.modelId?.split('/').pop() || 'Model',
                 content: r.content,
                 isComplete: true
-              })) || []
-            };
-          });
+              }))
+            });
+          }
+        }
 
         // Only set messages if we have history, otherwise keep empty for new chat
         if (formattedHistory.length > 0) {
@@ -147,7 +175,10 @@ export default function ChatPage() {
 
       // Handle streaming chunks
       socket.on('message_chunk', (data) => {
-        const { modelId, modelName, chunk, fullContent } = data;
+        const { sessionId, modelId, modelName, chunk, fullContent } = data;
+
+        // Filter out events from other sessions
+        if (sessionId && currentChatIdRef.current && sessionId !== currentChatIdRef.current) return;
 
         setCurrentMessages((prevMessages) => {
           const newMessages = [...prevMessages];
@@ -175,7 +206,9 @@ export default function ChatPage() {
       });
 
       socket.on('model_streaming_complete', (data) => {
-        const { modelId } = data;
+        const { sessionId, modelId } = data;
+        if (sessionId && currentChatIdRef.current && sessionId !== currentChatIdRef.current) return;
+
         setCurrentMessages((prevMessages) => {
           const newMessages = [...prevMessages];
           const lastMessage = newMessages[newMessages.length - 1];
@@ -190,7 +223,9 @@ export default function ChatPage() {
       });
 
       socket.on('model_error', (data) => {
-        const { modelId, error } = data;
+        const { sessionId, modelId, error } = data;
+        if (sessionId && currentChatIdRef.current && sessionId !== currentChatIdRef.current) return;
+
         setCurrentMessages((prevMessages) => {
           const newMessages = [...prevMessages];
           const lastMessage = newMessages[newMessages.length - 1];
@@ -217,15 +252,25 @@ export default function ChatPage() {
       });
     }
 
-    // Initialize a new chat if none selected
-    if (!currentChatId) {
-      startNewChat();
+    // Restore chat from URL if available
+    const urlChatId = searchParams.get('chatId');
+    if (urlChatId) {
+      // Join that session
+      const guestId = localStorage.getItem('askape_guest_id') || undefined;
+      // User might not be loaded yet in 'user' state variable, read from localStorage for immediate join
+      const savedUserStr = localStorage.getItem('user');
+      const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
+      const userId = savedUser ? savedUser.id : undefined;
+
+      console.log('🔗 Joining session from URL:', urlChatId);
+      setCurrentChatId(urlChatId);
+      socketService.joinSession(urlChatId, userId, guestId);
     }
 
     return () => {
       socketService.disconnect();
     };
-  }, []);
+  }, []); // Run once on mount
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -257,9 +302,17 @@ export default function ChatPage() {
   };
 
   const startNewChat = () => {
+    if (currentChatId) {
+      socketService.leaveSession(currentChatId);
+    }
     const newId = Date.now().toString();
     setCurrentChatId(newId);
     setCurrentMessages([]); // Clear for UI
+    setPrompt(''); // Clear input
+    setIsGenerating(false); // Reset generation state
+
+    // Clear URL
+    router.push('/');
 
     // Join new session on socket
     const guestId = localStorage.getItem('askape_guest_id') || undefined;
@@ -311,9 +364,18 @@ export default function ChatPage() {
       return;
     }
 
-    if (!currentChatId) {
-      startNewChat(); // Should exist, but safety check
-      return;
+    let activeChatId = currentChatId;
+    if (!activeChatId) {
+      // Lazy init: Create session ID without clearing input
+      activeChatId = Date.now().toString();
+      setCurrentChatId(activeChatId);
+      // Update URL
+      router.push(`/?chatId=${activeChatId}`);
+
+      // Join new session on socket
+      const guestId = localStorage.getItem('askape_guest_id') || undefined;
+      const userId = user?.id;
+      socketService.joinSession(activeChatId, userId, guestId);
     }
 
     setPrompt('');
@@ -338,7 +400,7 @@ export default function ChatPage() {
     const guestId = localStorage.getItem('askape_guest_id') || undefined;
     const userId = user?.id;
 
-    socketService.sendMessage(currentChatId, trimmedPrompt, selectedModels, userId, guestId);
+    socketService.sendMessage(activeChatId, trimmedPrompt, selectedModels, userId, guestId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -379,6 +441,10 @@ export default function ChatPage() {
 
     const userId = user?.id;
     const guestId = localStorage.getItem('askape_guest_id') || undefined;
+
+    // Update URL
+    router.push(`/?chatId=${chatId}`);
+
     socketService.joinSession(chatId, userId, guestId);
   };
 

@@ -65,6 +65,12 @@ class SocketService {
         this.socket.emit('join_session', { sessionId, userId, guestId });
     }
 
+    // Helper method to leave a session
+    public leaveSession(sessionId: string) {
+        if (!this.socket) return;
+        this.socket.emit('leave_session', sessionId);
+    }
+
     // Helper method to send a message
     public sendMessage(sessionId: string, message: string, modelIds: string[], userId?: string, guestId?: string) {
         if (!this.socket) return;
