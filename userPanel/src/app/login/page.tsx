@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 // import Script from 'next/script'; // Removed old Google script
 import './login.css';
 import { signInWithPopup } from 'firebase/auth';
@@ -10,6 +10,7 @@ import api from '../../config/api';
 import { useTheme } from '../../providers/ThemeProvider';
 
 export default function LoginPage() {
+    const searchParams = useSearchParams();
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
     const [error, setError] = useState('');
@@ -43,7 +44,9 @@ export default function LoginPage() {
                 localStorage.setItem('user', JSON.stringify(data.user));
                 localStorage.setItem('token', data.token);
                 setSuccess('Welcome! Redirecting...');
-                setTimeout(() => router.push('/'), 1000);
+
+                const redirectUrl = searchParams.get('redirect') || '/';
+                setTimeout(() => router.push(redirectUrl), 1000);
             }
         } catch (err: any) {
             console.error('Google Sign-In Error:', err);

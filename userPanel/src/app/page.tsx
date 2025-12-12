@@ -8,10 +8,17 @@ import { socketService } from './services/socket';
 import api from '../config/api';
 import './chat.css';
 import { useTheme } from '../providers/ThemeProvider';
+import AddMembersModal from './components/AddMembersModal';
 
 interface ChatMessage {
   id?: string;
+  userId?: string;
   prompt: string;
+  sender?: {
+    name: string;
+    avatar: string;
+  };
+  timestamp?: number;
   responses: {
     model: string;
     modelName: string;
@@ -27,6 +34,7 @@ interface ChatHistory {
   timestamp: number;
   messages: ChatMessage[];
   modelCount: number;
+  participantsCount: number;
 }
 
 function ChatContent() {
@@ -46,6 +54,10 @@ function ChatContent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [participants, setParticipants] = useState<any[]>([]);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [typingUsers, setTypingUsers] = useState<{ id: string, name: string }[]>([]);
   const initialLoadDone = useRef(false);
 
   // Refs
@@ -53,6 +65,7 @@ function ChatContent() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]); // Ref to access latest state in callbacks
   const currentChatIdRef = useRef<string | null>(null); // Ref for socket handlers
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync ref with state
   useEffect(() => {
@@ -61,17 +74,31 @@ function ChatContent() {
 
   useEffect(() => {
     currentChatIdRef.current = currentChatId;
+    setTypingUsers([]);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
   }, [currentChatId]);
 
   const fetchSessions = async () => {
     const guestId = localStorage.getItem('askape_guest_id');
-    const userId = user?.id;
+    // Read user directly from local storage to avoid stale closure issues in socket listeners
+    const savedUserStr = localStorage.getItem('user');
+    const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
+    const userId = savedUser?.id;
+
+    // If guest, don't fetch sessions (History not allowed for guests)
+    if (!userId) {
+      setAllChats([]);
+      return;
+    }
 
     if (!guestId && !userId) return;
 
     try {
       const res = await api.get('/api/chat/sessions', {
-        params: { userId, guestId }
+        params: { userId }
       });
       const data = res.data;
 
@@ -81,7 +108,8 @@ function ChatContent() {
           title: s.title,
           timestamp: new Date(s.updatedAt || s.createdAt).getTime(),
           messages: [], // We don't load full messages for the list
-          modelCount: s.messageCount || 0
+          modelCount: s.messageCount || 0,
+          participantsCount: s.participantsCount || 0
         })));
       }
     } catch (err) {
@@ -104,6 +132,11 @@ function ChatContent() {
     if (initialLoadDone.current) return;
 
     const urlChatId = searchParams.get('chatId');
+    const joinId = searchParams.get('join');
+
+    // If we are joining, don't restore yet, wait for join logic
+    if (joinId) return;
+
     if (urlChatId && urlChatId !== currentChatId) {
       console.log('Restoring chat from URL:', urlChatId);
       setCurrentChatId(urlChatId);
@@ -126,12 +159,64 @@ function ChatContent() {
 
       socket.on('session_joined', (data) => {
         console.log('Joined session:', data);
+        if (data.participants) {
+          setParticipants(data.participants);
+        } else {
+          setParticipants([]);
+        }
+
+        if (data && data.ownerId) {
+          setOwnerId(data.ownerId);
+        } else {
+          setOwnerId(null);
+        }
+
         if (data.guestId && !localStorage.getItem('askape_guest_id')) {
           localStorage.setItem('askape_guest_id', data.guestId);
           fetchSessions(); // Fetch sessions once we have a guest ID
         } else {
           fetchSessions(); // Refresh anyway
         }
+      });
+
+      socket.on('system_notification', (data) => {
+        if (data.type === 'member_joined') {
+          showToast(data.message);
+          setParticipants(prev => {
+            if (prev.find(p => p._id === data.member._id)) return prev;
+            return [...prev, data.member];
+          });
+        }
+      });
+
+      socket.on('user_message', (data) => {
+        console.log('Received user message:', data);
+        // data: { id, role, content, userId, ... }
+        // Verify it's not our own message (duplicates handled by optimistic UI, but good to check?)
+        // Actually optimistic UI handles own. But socket broadcasts to others in room using socket.to(room). 
+        // Sender doesn't receive it back usually with socket.to().
+        // So we can safely append.
+
+        setCurrentMessages(prev => {
+          // Avoid duplicates if any
+          if (prev.find(m => m.id === data.id)) return prev;
+
+          return [...prev, {
+            id: data.id,
+            prompt: data.content,
+            userId: data.userId,
+            sender: data.sender,
+            timestamp: data.createdAt ? new Date(data.createdAt).getTime() : Date.now(),
+            responses: []
+          }];
+        });
+
+        // Ensure scrolling happens
+        setTimeout(() => {
+          if (chatDisplayRef.current) {
+            chatDisplayRef.current.scrollTo({ top: chatDisplayRef.current.scrollHeight, behavior: 'smooth' });
+          }
+        }, 100);
       });
 
       // ... (other listeners same as before) ...
@@ -148,7 +233,10 @@ function ChatContent() {
 
             formattedHistory.push({
               id: msg.id,
+              userId: msg.sender && msg.role === 'USER' && msg.userId && msg.userId._id ? msg.userId._id : undefined, // Check nested
               prompt: msg.content,
+              sender: msg.sender,
+              timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : undefined,
               responses: aiResponses.map((r: any) => ({
                 model: r.modelId,
                 modelName: r.modelId?.split('/').pop() || 'Model',
@@ -167,6 +255,7 @@ function ChatContent() {
 
       socket.on('message_saved', (data) => {
         console.log('Message saved:', data);
+        fetchSessions(); // Refresh sidebar to show the new chat with its title immediately
       });
 
       socket.on('streaming_started', (data) => {
@@ -241,6 +330,42 @@ function ChatContent() {
         showToast(`Error from model: ${error}`);
       });
 
+      socket.on('typing_started', (data) => {
+        if (currentChatIdRef.current && data.sessionId !== currentChatIdRef.current) return;
+        setTypingUsers(prev => {
+          if (prev.find(u => u.id === data.user.id)) return prev;
+          return [...prev, data.user];
+        });
+      });
+
+      socket.on('typing_stopped', (data) => {
+        if (currentChatIdRef.current && data.sessionId !== currentChatIdRef.current) return;
+        setTypingUsers(prev => prev.filter(u => u.id !== data.user.id));
+      });
+
+      // Collaborative Input Listener
+      socket.on('input_changed', (data) => {
+        if (currentChatIdRef.current && data.sessionId === currentChatIdRef.current) {
+          // If the update is NOT from me (which it shouldn't be via broadcast, but good to check against user state)
+          // Actually checking userId is tricky if we are guest.
+          // But socket.to() doesn't send back to sender, so it's safe to apply.
+          setPrompt(data.content);
+
+          // Adjust height
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'; // Reset
+            // We need to wait for render or force calculate. 
+            // Setting value doesn't auto-resize immediately in React standard flow without the onChange trigger.
+            // We can do it in useEffect or timeout.
+            setTimeout(() => {
+              if (textareaRef.current) {
+                textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+              }
+            }, 0);
+          }
+        }
+      });
+
       socket.on('all_responses_complete', () => {
         setIsGenerating(false);
         fetchSessions(); // Update list order/titles after chat interaction
@@ -254,7 +379,31 @@ function ChatContent() {
 
     // Restore chat from URL if available
     const urlChatId = searchParams.get('chatId');
-    if (urlChatId) {
+    const joinId = searchParams.get('join');
+
+    if (joinId) {
+      // Handle join link
+      const savedUser = localStorage.getItem('user'); // Basic check, better to use 'user' state but it might be null initially
+      if (!savedUser) {
+        console.log('Redirecting to login for join');
+        router.push(`/login?redirect=/?join=${joinId}`);
+        return;
+      }
+
+      const userData = JSON.parse(savedUser);
+      // Call API to join
+      api.post(`/api/chat/sessions/${joinId}/participants`, { userId: userData.id })
+        .then(() => {
+          showToast('Joined conversation');
+          router.push(`/?chatId=${joinId}`);
+        })
+        .catch(err => {
+          console.error('Join failed', err);
+          showToast('Failed to join conversation');
+          // Even if failed (e.g. already member), try to load it
+          router.push(`/?chatId=${joinId}`);
+        });
+    } else if (urlChatId) {
       // Join that session
       const guestId = localStorage.getItem('askape_guest_id') || undefined;
       // User might not be loaded yet in 'user' state variable, read from localStorage for immediate join
@@ -302,10 +451,23 @@ function ChatContent() {
   };
 
   const startNewChat = () => {
+    // Check if the latest personal chat is empty. If so, reuse it.
+    const latestPersonalChat = allChats.find(c => c.participantsCount === 0);
+    if (latestPersonalChat && latestPersonalChat.modelCount === 0) {
+      if (currentChatId !== latestPersonalChat.id) {
+        loadChat(latestPersonalChat.id);
+      } else {
+        // Already on the empty chat, just clear input
+        setPrompt('');
+        showToast('Already on a new chat');
+      }
+      return;
+    }
+
     if (currentChatId) {
       socketService.leaveSession(currentChatId);
     }
-    const newId = Date.now().toString();
+    const newId = crypto.randomUUID();
     setCurrentChatId(newId);
     setCurrentMessages([]); // Clear for UI
     setPrompt(''); // Clear input
@@ -323,6 +485,7 @@ function ChatContent() {
 
     // Also fetch sessions to ensure we have latest list
     fetchSessions();
+    setTypingUsers([]);
   };
 
   const deleteChat = async (chatId: string, e: React.MouseEvent) => {
@@ -367,7 +530,7 @@ function ChatContent() {
     let activeChatId = currentChatId;
     if (!activeChatId) {
       // Lazy init: Create session ID without clearing input
-      activeChatId = Date.now().toString();
+      activeChatId = crypto.randomUUID();
       setCurrentChatId(activeChatId);
       // Update URL
       router.push(`/?chatId=${activeChatId}`);
@@ -386,6 +549,7 @@ function ChatContent() {
     // Optimistically add user message to UI
     const newTurn: ChatMessage = {
       prompt: trimmedPrompt,
+      userId: user?.id,
       responses: selectedModels.map(model => ({
         model,
         modelName: model.split('/').pop() || model,
@@ -410,10 +574,38 @@ function ChatContent() {
     }
   };
 
+  const handleTyping = () => {
+    if (!currentChatId) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    } else {
+      // Start typing
+      const userId = user?.id || localStorage.getItem('askape_guest_id') || 'guest';
+      const userName = user?.name || 'Guest';
+      socketService.emitTyping(currentChatId, { id: userId, name: userName });
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      const userId = user?.id || localStorage.getItem('askape_guest_id') || 'guest';
+      const userName = user?.name || 'Guest';
+      socketService.emitStopTyping(currentChatId, { id: userId, name: userName });
+      typingTimeoutRef.current = null;
+    }, 2000);
+  };
+
   const handleTextareaInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setPrompt(e.target.value);
+    const text = e.target.value;
+    setPrompt(text);
     e.target.style.height = 'auto';
     e.target.style.height = e.target.scrollHeight + 'px';
+    handleTyping();
+
+    // Collaborative Sync
+    if (currentChatId) {
+      const userId = user?.id || localStorage.getItem('askape_guest_id');
+      socketService.emitInputChange(currentChatId, text, userId);
+    }
   };
 
   const copyText = (text: string) => {
@@ -468,55 +660,105 @@ function ChatContent() {
           <span className="logo-text">AskApe</span>
         </div>
 
-        <button className="new-chat-btn" onClick={startNewChat}>
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-          </svg>
-          New Chat
-        </button>
+        {user ? (
+          <button className="new-chat-btn" onClick={startNewChat}>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            </svg>
+            New Chat
+          </button>
+        ) : (
+          <div className="guest-notice" style={{ padding: '10px 15px', color: '#888', fontSize: '0.9rem', textAlign: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '10px' }}>
+            Login to save history
+          </div>
+        )}
 
         <div className="history-section">
-          <div className="history-header">
-            <span className="history-title">Chat History</span>
-            <span className="history-count">{allChats.length} chat{allChats.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div className="history-list">
-            {allChats.length === 0 ? (
-              <div className="history-empty">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <p>No chat history yet.<br />Start a new conversation!</p>
+          {user && allChats.filter(c => c.participantsCount > 0).length > 0 && (
+            <div className="history-group">
+              <div className="history-header">
+                <span className="history-title">Group chats</span>
               </div>
-            ) : (
-              allChats.map(chat => (
-                <div
-                  key={chat.id}
-                  className={`history-item ${chat.id === currentChatId ? 'active' : ''}`}
-                  onClick={() => loadChat(chat.id)}
-                >
-                  <div className="history-item-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                  </div>
-                  <div className="history-item-content">
-                    <div className="history-item-title">{chat.title}</div>
-                    <div className="history-item-meta">
-                      <span>{formatDate(chat.timestamp)}</span>
-                      <span>•</span>
-                      <span>{chat.modelCount} models</span>
+              <div className="history-list">
+                {allChats.filter(c => c.participantsCount > 0).map(chat => (
+                  <div
+                    key={chat.id}
+                    className={`history-item ${chat.id === currentChatId ? 'active' : ''}`}
+                    onClick={() => loadChat(chat.id)}
+                  >
+                    <div className="history-item-icon">
+                      <div className="flex -space-x-1">
+                        <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white border border-[#1e1e1e]">G</div>
+                        {/* Placeholder for group icon */}
+                      </div>
                     </div>
+                    <div className="history-item-content">
+                      <div className="history-item-title">{chat.title}</div>
+                      <div className="history-item-meta">
+                        <span>{formatDate(chat.timestamp)}</span>
+                      </div>
+                    </div>
+                    {user && ownerId && user.id === ownerId && (
+                      <button className="history-item-delete" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
-                  <button className="history-item-delete" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="history-group">
+            <div className="history-header">
+              <span className="history-title">Your chats</span>
+            </div>
+
+            <div className="history-list">
+              {!user ? (
+                <div className="history-empty">
+                  <p style={{ opacity: 0.6 }}>History is disabled for guest users.</p>
                 </div>
-              ))
-            )}
+              ) : allChats.length === 0 ? (
+                <div className="history-empty">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <p>No chat history yet.<br />Start a new conversation!</p>
+                </div>
+              ) : (
+                allChats.filter(c => c.participantsCount === 0).map(chat => (
+                  <div
+                    key={chat.id}
+                    className={`history-item ${chat.id === currentChatId ? 'active' : ''}`}
+                    onClick={() => loadChat(chat.id)}
+                  >
+                    <div className="history-item-icon">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <div className="history-item-content">
+                      <div className="history-item-title">{chat.title}</div>
+                      <div className="history-item-meta">
+                        <span>{formatDate(chat.timestamp)}</span>
+                        <span>•</span>
+                        <span>{chat.modelCount} models</span>
+                      </div>
+                    </div>
+                    <button className="history-item-delete" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
+
         </div>
 
         <nav className="sidebar-nav">
@@ -557,11 +799,41 @@ function ChatContent() {
       <div className="main-container">
         <div className="sticky-header">
           <div className="header-top">
-            <button className="hamburger-menu" onClick={toggleSidebar}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-3">
+              <button className="hamburger-menu" onClick={toggleSidebar}>
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+
+              {participants.length > 0 && (
+                <div className="flex items-center gap-2 ml-4">
+                  <div className="flex -space-x-2">
+                    {participants.slice(0, 3).map((p, i) => (
+                      <div key={i} className="w-8 h-8 rounded-full border-2 border-[#121212] bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase" title={p.name}>
+                        {p.avatar || p.name.charAt(0)}
+                      </div>
+                    ))}
+                    {participants.length > 3 && (
+                      <div className="w-8 h-8 rounded-full border-2 border-[#121212] bg-gray-700 flex items-center justify-center text-xs text-white">
+                        +{participants.length - 3}
+                      </div>
+                    )}
+                  </div>
+                  {user && (
+                    <button
+                      onClick={() => setIsAddMemberOpen(true)}
+                      className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-colors border border-dashed border-gray-600"
+                      title="Add people"
+                    >
+                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <div className="model-selector">
             {[
@@ -605,10 +877,51 @@ function ChatContent() {
             ) : (
               currentMessages.map((turn, turnIdx) => (
                 <div key={turnIdx} className="chat-turn">
-                  <div className="user-message">
-                    <div className="user-message-label">You</div>
-                    <div className="user-message-text">{turn.prompt}</div>
-                  </div>
+                  {(() => {
+                    const isGroup = participants.length > 0; // Check logic
+                    const isOther = turn.userId !== user?.id;
+                    const hasSender = !!turn.sender;
+                    // console.log(`Turn ${turnIdx}: isGroup=${isGroup} (${participants.length}), isOther=${isOther}, hasSender=${hasSender}`, turn);
+                    return null;
+                  })()}
+                  {participants.length > 0 && turn.userId !== user?.id && turn.sender ? (
+                    // Group Chat - Message from Others (Left aligned, Avatar + Name)
+                    <div className="flex gap-3 mb-4 w-full justify-start">
+                      <div className="flex-shrink-0 mt-1">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase shadow-sm border border-[#333]">
+                          {turn.sender.avatar || turn.sender.name.charAt(0)}
+                        </div>
+                      </div>
+                      <div className="flex flex-col min-w-0 items-start max-w-[80%]">
+                        <div className="flex items-center gap-2 mb-1 ml-1">
+                          <span className="text-xs font-semibold text-gray-400">{turn.sender.name}</span>
+                          {turn.timestamp && <span className="text-[10px] text-gray-500">{new Date(turn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                        </div>
+                        <div className="bg-[#2a2a2a] p-3 rounded-2xl rounded-tl-none text-gray-200 text-sm shadow-md border border-[#333]">
+                          {turn.prompt}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    // Private Chat OR My Message (Right aligned)
+                    <div className="flex w-full justify-end mb-4">
+                      <div className={`flex flex-col items-end max-w-[80%] ${!participants.length ? 'w-full !items-start !max-w-full' : ''}`}> {/* Keep full width/left for private chat if desired, but request implies Right for "My" message generally. The user request was specific to LEFT/RIGHT separation. Assuming Right for Me is universal for consistency, but Private chat might be single column. Let's make "My" message Right aligned in group chat, but block in private? 
+                      Actually, usually prompts are Right aligned in all chat apps. 
+                      Let's stick to Right alignment for "My" message everywhere for consistency effectively. 
+                      BUT: existing code had "user-message" which was block. 
+                      I will apply Right Align for Group Chat specific context or just generally for "My".
+                      The user request image looks like a Group Chat context.
+                      I'll default to Right align for "My" messages.
+                      */}
+                        <div className={`user-message !mb-0 !max-w-full bg-[#1e1e1e] border-[#333] ${participants.length > 0 ? '!bg-[#1a1a1a] !rounded-br-none !text-right' : ''}`}>
+                          {/* Label */}
+                          {!participants.length && <div className="user-message-label">You</div>}
+                          <div className={`user-message-text ${participants.length > 0 ? 'text-gray-300' : ''}`}>{turn.prompt}</div>
+                        </div>
+                        {turn.timestamp && participants.length > 0 && <span className="text-[10px] text-gray-500 mt-1 mr-1">{new Date(turn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                      </div>
+                    </div>
+                  )}
                   <div className="response-grid">
                     {turn.responses.map((resp, respIdx) => (
                       <div key={respIdx} className="response-card">
@@ -649,6 +962,15 @@ function ChatContent() {
         </main>
 
         <div className="input-area">
+          {participants.length > 0 && typingUsers.length > 0 && (
+            <div className="typing-status text-xs text-gray-400 ml-4 mb-2 animate-pulse font-medium">
+              {typingUsers.length === 1
+                ? `${typingUsers[0].name} is typing...`
+                : typingUsers.length === 2
+                  ? `${typingUsers[0].name} and ${typingUsers[1].name} are typing...`
+                  : `${typingUsers.length} people are typing...`}
+            </div>
+          )}
           <div className="input-container">
             <textarea
               ref={textareaRef}
@@ -675,6 +997,26 @@ function ChatContent() {
         </svg>
         <span>{toast.message}</span>
       </div>
+
+      {currentChatId && (
+        <AddMembersModal
+          isOpen={isAddMemberOpen}
+          onClose={() => setIsAddMemberOpen(false)}
+          sessionId={currentChatId}
+          onMemberAdded={(member) => {
+            setIsAddMemberOpen(false);
+            showToast(`${member.name} added`);
+            setParticipants(prev => {
+              if (prev.find(p => p._id === member._id)) return prev;
+              return [...prev, { ...member }];
+            });
+            if (socketService.socket) {
+              socketService.socket.emit('member_added', { sessionId: currentChatId, member });
+            }
+          }}
+        />
+      )
+      }
     </>
   );
 }
