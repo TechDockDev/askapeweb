@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 export default function Plans() {
     const [plans, setPlans] = useState([]);
@@ -21,7 +22,7 @@ export default function Plans() {
     const fetchPlans = async () => {
         try {
             const token = localStorage.getItem('adminToken');
-            const res = await axios.get('http://localhost:3001/api/admin/plans', {
+            const res = await axios.get(`${API_BASE_URL}/admin/plans`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setPlans(res.data);
@@ -44,7 +45,7 @@ export default function Plans() {
                 }
             };
 
-            await axios.post('http://localhost:3001/api/admin/plans', payload, {
+            await axios.post(`${API_BASE_URL}/admin/plans`, payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setShowModal(false);
