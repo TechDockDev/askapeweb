@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { API_BASE_URL } from '../config';
 
 export default function Dashboard() {
     const [stats, setStats] = useState({ totalUsers: 0, totalPlans: 0, monthlyGrowth: [] });
@@ -9,7 +10,7 @@ export default function Dashboard() {
         const fetchStats = async () => {
             try {
                 const token = localStorage.getItem('adminToken');
-                const res = await axios.get('http://localhost:3001/api/admin/stats', {
+                const res = await axios.get(`${API_BASE_URL}/admin/stats`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setStats(res.data);

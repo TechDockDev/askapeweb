@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 export default function Users() {
     const [users, setUsers] = useState([]);
@@ -12,7 +13,7 @@ export default function Users() {
     const fetchUsers = async () => {
         try {
             const token = localStorage.getItem('adminToken');
-            const res = await axios.get('http://localhost:3001/api/admin/users', {
+            const res = await axios.get(`${API_BASE_URL}/admin/users`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(res.data);
@@ -24,7 +25,7 @@ export default function Users() {
     const fetchUserDetails = async (id) => {
         try {
             const token = localStorage.getItem('adminToken');
-            const res = await axios.get(`http://localhost:3001/api/admin/users/${id}`, {
+            const res = await axios.get(`${API_BASE_URL}/admin/users/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSelectedUser(res.data);
@@ -61,8 +62,8 @@ export default function Users() {
                                     <td className="p-4 text-gray-600">{user.email || 'Guest'}</td>
                                     <td className="p-4">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${user.plan === 'pro' ? 'bg-purple-100 text-purple-700' :
-                                                user.plan === 'enterprise' ? 'bg-blue-100 text-blue-700' :
-                                                    'bg-gray-100 text-gray-700'
+                                            user.plan === 'enterprise' ? 'bg-blue-100 text-blue-700' :
+                                                'bg-gray-100 text-gray-700'
                                             }`}>
                                             {user.plan}
                                         </span>

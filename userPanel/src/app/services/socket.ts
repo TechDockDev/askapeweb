@@ -3,10 +3,12 @@ import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL } from '../../config/api';
 
 // Define the socket URL
-const SOCKET_URL = API_BASE_URL;
+// Define the socket URL
+const SOCKET_URL = 'wss://askape.apeitnow.com';
 
 // Connection options
 const SOCKET_OPTIONS = {
+    path: '/socket.io',
     transports: ['websocket', 'polling'],
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
