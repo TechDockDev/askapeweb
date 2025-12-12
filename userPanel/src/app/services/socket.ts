@@ -9,7 +9,9 @@ const SOCKET_URL = 'wss://askape.apeitnow.com';
 // Connection options
 const SOCKET_OPTIONS = {
     path: '/socket.io',
-    transports: ['websocket', 'polling'],
+    transports: ['websocket'], // Force websocket only to avoid polling issues with Nginx
+    secure: true,
+    rejectUnauthorized: false,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     autoConnect: false // We'll connect manually when component mounts
