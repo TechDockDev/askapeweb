@@ -139,6 +139,26 @@ export default function socketHandler(io) {
             currentUserId = userId;
             currentGuestId = guestId || generateGuestId();
 
+            // Access Control & room joining
+            // Guests behave as if useDatabase is false (no persistence)
+            if (useDatabase && sessionId && currentUserId) {
+                try {
+                    const session = await Session.findOne({ sessionId });
+                    if (session) {
+                        // Check if user is owner or participant
+                        const isOwner = session.userId === currentUserId;
+                        const isParticipant = session.participants && session.participants.includes(currentUserId);
+
+                        if (!isOwner && !isParticipant) {
+                            socket.emit('error', { message: 'Access denied: You are not a member of this chat.' });
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Session check error', e);
+                }
+            }
+
             socket.join(sessionId);
             console.log(`📥 Client joined session: ${sessionId}`);
 
@@ -146,25 +166,10 @@ export default function socketHandler(io) {
                 await getOrCreateGuestUser(currentGuestId);
             }
 
+            // Removed eager session creation. Session will be created on first message.
             try {
                 if (useDatabase) {
-                    await Session.findOneAndUpdate(
-                        { sessionId },
-                        {
-                            $setOnInsert: {
-                                sessionId,
-                                userId: currentUserId,
-                                guestId: currentGuestId,
-                                title: 'New Chat',
-                                isActive: true,
-                                messageCount: 0,
-                                totalTokensUsed: 0,
-                                createdAt: new Date()
-                            },
-                            $set: { updatedAt: new Date() }
-                        },
-                        { upsert: true, new: true }
-                    );
+                    // Lazy creation: Do nothing here. Session will be created on first message.
                 } else {
                     if (!sessionStorage.has(sessionId)) {
                         sessionStorage.set(sessionId, {
@@ -180,27 +185,58 @@ export default function socketHandler(io) {
                 console.error('❌ Session error:', err.message);
             }
 
+            let participants = [];
+            if (useDatabase && sessionId) {
+                const sessionData = await Session.findOne({ sessionId }).populate('participants', 'name email avatar');
+                if (sessionData && sessionData.participants) {
+                    participants = sessionData.participants;
+                }
+                // Add owner to participants list if not already there (for display)
+                if (sessionData && sessionData.userId) {
+                    // Check if owner is already in participants array (it shouldn't be by schema design usually, but let's be safe)
+                    // Actually owner sits in 'userId'. We should fetch owner details too.
+                    const owner = await User.findById(sessionData.userId).select('name email avatar');
+                    if (owner && !participants.find(p => p._id.toString() === owner._id.toString())) {
+                        participants.unshift(owner);
+                    }
+                }
+            }
+
             socket.emit('session_joined', {
                 sessionId,
                 guestId: currentGuestId,
-                usingDatabase: useDatabase
+                usingDatabase: useDatabase,
+                participants,
+                ownerId: (useDatabase && sessionId) ? (await Session.findOne({ sessionId }))?.userId : null
             });
 
             try {
                 let history = [];
-                if (useDatabase) {
-                    const messages = await Chat.find({ sessionId }).sort({ createdAt: 1 });
-                    history = messages.map(m => ({
-                        id: m.messageId,
-                        role: m.role,
-                        content: m.content,
-                        tokensUsed: m.tokensUsed || 0,
-                        aiResponses: m.aiResponses || [],
-                        createdAt: m.createdAt
-                    }));
-                } else {
-                    const session = sessionStorage.get(sessionId);
-                    history = session?.messages || [];
+                // ONLY load history for logged-in users. Guests get ephemeral chat (no history on refresh).
+                // ONLY load history for logged-in users. Guests get ephemeral chat.
+                // Guests using DB will just get empty history (since nothing saved)
+                if (currentUserId) {
+                    if (useDatabase) {
+                        const messages = await Chat.find({ sessionId })
+                            .sort({ createdAt: 1 })
+                            .populate('userId', 'name avatar'); // Populate sender info
+
+                        history = messages.map(m => ({
+                            id: m.messageId,
+                            role: m.role,
+                            content: m.content,
+                            sender: m.role === 'USER' && m.userId && m.userId._id ? {
+                                name: m.userId.name,
+                                avatar: m.userId.avatar
+                            } : undefined,
+                            tokensUsed: m.tokensUsed || 0,
+                            aiResponses: m.aiResponses || [],
+                            createdAt: m.createdAt
+                        }));
+                    } else {
+                        const session = sessionStorage.get(sessionId);
+                        history = session?.messages || [];
+                    }
                 }
                 socket.emit('session_history', history);
             } catch (err) {
@@ -237,7 +273,7 @@ export default function socketHandler(io) {
                                 sessionId,
                                 messageId,
                                 userId: effectiveUserId,
-                                guestId: effectiveGuestId,
+                                // guestId: effectiveGuestId, // Removed guestId persistence
                                 role: 'USER',
                                 content: message,
                                 tokensUsed: promptTokens,
@@ -249,28 +285,67 @@ export default function socketHandler(io) {
 
                     try {
                         const msgCount = await Chat.countDocuments({ sessionId, role: 'USER' });
-                        if (msgCount === 1) {
-                            await Session.findOneAndUpdate(
-                                { sessionId },
-                                {
-                                    title: message.substring(0, 50),
-                                    messageCount: 1,
-                                    updatedAt: new Date()
-                                }
-                            );
-                        } else {
-                            await Session.findOneAndUpdate(
-                                { sessionId },
-                                { $inc: { messageCount: 1 }, updatedAt: new Date() }
-                            );
+                        // Use <= 1 to catch the first message reliably
+                        const title = msgCount <= 1 ? message.substring(0, 50) : undefined;
+
+                        const updateOps = {
+                            $inc: { messageCount: 1 },
+                            $set: { updatedAt: new Date() }
+                        };
+
+                        if (title) {
+                            updateOps.$set.title = title;
                         }
-                    } catch (sessionErr) { }
+
+                        console.log(`📝 Creating/Updating session ${sessionId} for user ${effectiveUserId}. Title: ${title}`);
+
+                        // Lazy creation: Upsert session on every message to ensure it exists
+                        await Session.findOneAndUpdate(
+                            { sessionId },
+                            {
+                                $setOnInsert: {
+                                    sessionId,
+                                    userId: effectiveUserId,
+                                    // guestId: effectiveGuestId,
+                                    // title: title || 'New Chat',
+                                    isActive: true,
+                                    totalTokensUsed: 0,
+                                    createdAt: new Date()
+                                },
+                                ...updateOps
+                            },
+                            { upsert: true, new: true }
+                        );
+                    } catch (sessionErr) {
+                        console.error('❌ Session creation/update failed:', sessionErr);
+                    }
                 } else {
                     const session = sessionStorage.get(sessionId) || { sessionId, messages: [] };
                     session.messages.push({ id: messageId, role: 'USER', content: message, aiResponses: [] });
                     sessionStorage.set(sessionId, session);
                 }
+
                 socket.emit('message_saved', { id: messageId, stored: useDatabase ? 'mongodb' : 'memory' });
+
+                // Broadcast user message to others in the room so they see the prompt
+                let senderInfo = {};
+                if (useDatabase && effectiveUserId) {
+                    const sender = await User.findById(effectiveUserId).select('name avatar');
+                    if (sender) {
+                        senderInfo = { name: sender.name, avatar: sender.avatar };
+                    }
+                }
+
+                socket.to(sessionId).emit('user_message', {
+                    id: messageId,
+                    role: 'USER',
+                    content: message,
+                    userId: effectiveUserId,
+                    sender: senderInfo,
+                    guestId: effectiveGuestId,
+                    createdAt: new Date()
+                });
+                
             } catch (err) {
                 socket.emit('message_saved', { id: messageId, stored: 'failed', error: err.message });
             }
@@ -278,7 +353,7 @@ export default function socketHandler(io) {
             const conversationContext = await buildConversationContext(sessionId, message);
             const aiResponseId = crypto.randomUUID();
 
-            socket.emit('streaming_started', {
+            io.to(sessionId).emit('streaming_started', {
                 sessionId,
                 messageId: aiResponseId,
                 models: selectedModels.map(id => ({ id, name: id.split('/').pop() }))
@@ -286,7 +361,7 @@ export default function socketHandler(io) {
 
             const modelPromises = selectedModels.map(async (modelId) => {
                 const modelName = modelId.split('/').pop();
-                socket.emit('model_streaming_start', { modelId, modelName });
+                io.to(sessionId).emit('model_streaming_start', { modelId, modelName });
 
                 try {
                     let fullContent = '';
@@ -299,7 +374,8 @@ export default function socketHandler(io) {
                             const chunk = mockText.substring(i, i + chunkSize);
                             fullContent += chunk;
                             chunkCount++;
-                            socket.emit('message_chunk', {
+                            chunkCount++;
+                            io.to(sessionId).emit('message_chunk', {
                                 sessionId,
                                 modelId,
                                 modelName,
@@ -313,7 +389,8 @@ export default function socketHandler(io) {
                         await queryHuggingFaceStream(modelId, conversationContext, (chunk, full) => {
                             fullContent = full;
                             chunkCount++;
-                            socket.emit('message_chunk', {
+                            chunkCount++;
+                            io.to(sessionId).emit('message_chunk', {
                                 sessionId,
                                 modelId,
                                 modelName,
@@ -326,7 +403,7 @@ export default function socketHandler(io) {
 
                     const responseTokens = estimateTokens(fullContent);
 
-                    socket.emit('model_streaming_complete', {
+                    io.to(sessionId).emit('model_streaming_complete', {
                         sessionId,
                         modelId,
                         modelName,
@@ -345,7 +422,7 @@ export default function socketHandler(io) {
                     };
 
                 } catch (error) {
-                    socket.emit('model_error', { sessionId, modelId, modelName, error: error.message });
+                    io.to(sessionId).emit('model_error', { sessionId, modelId, modelName, error: error.message });
                     return { success: false, modelId, error: error.message };
                 }
             });
@@ -364,7 +441,7 @@ export default function socketHandler(io) {
             const totalAiTokens = aiResponses.reduce((sum, r) => sum + r.tokensUsed, 0);
 
             try {
-                if (useDatabase && aiResponses.length > 0) {
+                if (useDatabase && effectiveUserId && aiResponses.length > 0) {
                     await Chat.findOneAndUpdate(
                         { messageId: aiResponseId },
                         {
@@ -372,7 +449,7 @@ export default function socketHandler(io) {
                                 sessionId,
                                 messageId: aiResponseId,
                                 userId: effectiveUserId,
-                                guestId: effectiveGuestId,
+                                // guestId: effectiveGuestId, // Guests don't get DB records
                                 role: 'AI',
                                 content: '',
                                 createdAt: new Date()
@@ -392,7 +469,7 @@ export default function socketHandler(io) {
                         { $inc: { totalTokensUsed: totalTokens }, updatedAt: new Date() }
                     ).catch(() => { });
 
-                } else if (!useDatabase) {
+                } else if (!useDatabase || !effectiveUserId) {
                     const session = sessionStorage.get(sessionId);
                     if (session) {
                         session.messages.push({ id: aiResponseId, role: 'AI', content: '', aiResponses });
@@ -402,13 +479,46 @@ export default function socketHandler(io) {
                 socket.emit('error', { type: 'save_error', message: 'Failed to save AI response' });
             }
 
-            socket.emit('all_responses_complete', { sessionId, modelsCompleted: aiResponses.length });
+            io.to(sessionId).emit('all_responses_complete', { sessionId, modelsCompleted: aiResponses.length });
         });
 
         socket.on('leave_session', (sessionId) => {
             if (sessionId) {
                 socket.leave(sessionId);
                 console.log(`out Client left session: ${sessionId}`);
+            }
+        });
+        socket.on('input_change', (data) => {
+            const { sessionId, content, userId } = data;
+            if (sessionId) {
+                // Broadcast to others in the room
+                socket.to(sessionId).emit('input_changed', { sessionId, content, userId });
+            }
+        });
+
+        socket.on('typing_start', (data) => {
+            const { sessionId, user } = data;
+            if (sessionId && user) {
+                socket.to(sessionId).emit('typing_started', { sessionId, user });
+            }
+        });
+
+        socket.on('typing_stop', (data) => {
+            const { sessionId, user } = data;
+            if (sessionId && user) {
+                socket.to(sessionId).emit('typing_stopped', { sessionId, user });
+            }
+        });
+
+        socket.on('member_added', (data) => {
+            // Broadcast to everyone in the room (including sender if needed, but sender usually knows)
+            // data: { sessionId, member: { name, email, avatar } }
+            if (data && data.sessionId) {
+                socket.to(data.sessionId).emit('system_notification', {
+                    type: 'member_joined',
+                    message: `${data.member.name || 'A new member'} joined the conversation.`,
+                    member: data.member
+                });
             }
         });
 

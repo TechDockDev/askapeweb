@@ -6,6 +6,7 @@ import { sessionStorage, chatStorage } from '../config/memoryStorage.js';
 import { AVAILABLE_MODELS } from '../config/constants.js';
 import { queryHuggingFaceChat } from '../utils/huggingface.js';
 import { estimateTokens, updateUserTokenUsage } from '../utils/helpers.js';
+import { CLIENT_RENEG_LIMIT } from 'tls';
 
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
@@ -17,17 +18,19 @@ function generateMockResponse(model, prompt) {
 
 export const getSessions = async (req, res) => {
     try {
-        const { userId, guestId } = req.query;
+        const { userId } = req.query;
+        console.log("Query--->", req.query);
+        console.log("userId--->", userId);
         const useDatabase = isDatabaseConnected();
 
-        if (!userId && !guestId) {
-            return res.status(400).json({ success: false, error: 'userId or guestId required' });
+        if (!userId) {
+            return res.status(400).json({ success: false, error: 'userId required' });
         }
 
         let sessions = [];
 
         if (useDatabase) {
-            const query = userId ? { userId } : { guestId };
+            const query = { $or: [{ userId }, { participants: userId }] };
             sessions = await Session.find(query)
                 .sort({ updatedAt: -1 })
                 .limit(50)
@@ -39,7 +42,7 @@ export const getSessions = async (req, res) => {
             }
         } else {
             sessions = Array.from(sessionStorage.values())
-                .filter(s => s.userId === userId || s.guestId === guestId)
+                .filter(s => s.userId === userId)
                 .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
         }
 
@@ -50,6 +53,9 @@ export const getSessions = async (req, res) => {
                 sessionId: s.sessionId,
                 title: s.title || 'New Chat',
                 messageCount: s.messageCount || 0,
+                participantsCount: s.participants ? s.participants.length : 0,
+                participantsCount: s.participants ? s.participants.length : 0,
+                ownerId: s.userId,
                 createdAt: s.createdAt,
                 updatedAt: s.updatedAt
             }))
@@ -71,7 +77,10 @@ export const getSessionHistory = async (req, res) => {
         if (useDatabase) {
             session = await Session.findOne({ sessionId }).lean();
             if (session) {
-                messages = await Chat.find({ sessionId }).sort({ createdAt: 1 }).lean();
+                messages = await Chat.find({ sessionId })
+                    .sort({ createdAt: 1 })
+                    .populate('userId', 'name avatar') // Populate sender info
+                    .lean();
             }
         } else {
             session = sessionStorage.get(sessionId);
@@ -86,7 +95,9 @@ export const getSessionHistory = async (req, res) => {
             success: true,
             session: {
                 sessionId: session.sessionId,
+                sessionId: session.sessionId,
                 title: session.title,
+                ownerId: session.userId,
                 createdAt: session.createdAt,
                 updatedAt: session.updatedAt
             },
@@ -95,7 +106,11 @@ export const getSessionHistory = async (req, res) => {
                 id: m.messageId || m.id,
                 role: m.role,
                 content: m.content,
-                tokensUsed: m.tokensUsed || 0,
+                toeknsUsed: m.tokensUsed || 0,
+                sender: m.role === 'USER' && m.userId && m.userId._id ? {
+                    name: m.userId.name,
+                    avatar: m.userId.avatar
+                } : undefined,
                 aiResponses: m.aiResponses || [],
                 createdAt: m.createdAt
             }))
@@ -160,6 +175,49 @@ export const updateSessionTitle = async (req, res) => {
             res.json({ success: true, session });
         }
     } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+export const addParticipant = async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const { userId } = req.body;
+        const useDatabase = isDatabaseConnected();
+
+        if (!userId) {
+            return res.status(400).json({ success: false, error: 'User ID required' });
+        }
+
+        if (useDatabase) {
+            const session = await Session.findOne({ sessionId });
+            if (!session) {
+                return res.status(404).json({ success: false, error: 'Session not found' });
+            }
+
+            // Check if already participant or owner
+            if (session.userId === userId || session.participants?.includes(userId)) {
+                return res.status(400).json({ success: false, error: 'User already in session' });
+            }
+
+            session.participants = session.participants || [];
+            session.participants.push(userId);
+            await session.save();
+
+            res.json({ success: true, session });
+        } else {
+            // Memory mode not fully supported for multi-user but logic remains same
+            const session = sessionStorage.get(sessionId);
+            if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+
+            session.participants = session.participants || [];
+            if (!session.participants.includes(userId)) {
+                session.participants.push(userId);
+            }
+            res.json({ success: true, session });
+        }
+    } catch (error) {
+        console.error('Add participant error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

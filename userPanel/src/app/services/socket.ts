@@ -76,6 +76,21 @@ class SocketService {
         if (!this.socket) return;
         this.socket.emit('message', { sessionId, message, modelIds, userId, guestId });
     }
+
+    public emitInputChange(sessionId: string, content: string, userId?: string) {
+        if (!this.socket) return;
+        this.socket.emit('input_change', { sessionId, content, userId });
+    }
+
+    public emitTyping(sessionId: string, user: { id: string; name: string }) {
+        if (!this.socket) return;
+        this.socket.emit('typing_start', { sessionId, user });
+    }
+
+    public emitStopTyping(sessionId: string, user: { id: string; name: string }) {
+        if (!this.socket) return;
+        this.socket.emit('typing_stop', { sessionId, user });
+    }
 }
 
 export const socketService = SocketService.getInstance();
