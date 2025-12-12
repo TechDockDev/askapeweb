@@ -63,7 +63,7 @@ connectDB(MONGODB_URI).then((connected) => {
     setAuthUserStorage(userStorage);
 
     // Routes
-    app.use('/auth', authRoutes);
+    app.use('/api/auth', authRoutes);
     app.use('/api/chat', chatRoutes);
     app.use('/api', userRoutes);
     app.use('/api/admin', adminRoutes);
