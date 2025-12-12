@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 // import Script from 'next/script'; // Removed old Google script
 import './login.css';
@@ -9,7 +9,7 @@ import { auth, googleProvider } from '../../config/firebase';
 import api from '../../config/api';
 import { useTheme } from '../../providers/ThemeProvider';
 
-export default function LoginPage() {
+function LoginContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
@@ -116,5 +116,13 @@ export default function LoginPage() {
                 </div>
             </div>
         </>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+            <LoginContent />
+        </Suspense>
     );
 }
