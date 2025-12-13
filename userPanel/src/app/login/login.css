@@ -212,6 +212,36 @@ body {
     height: 22px;
 }
 
+.guest-btn {
+    width: 100%;
+    padding: 1rem 1.5rem;
+    background: transparent;
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.875rem;
+    transition: all 0.3s ease;
+    margin-top: 1rem;
+}
+
+.guest-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-secondary);
+    transform: translateY(-2px);
+}
+
+.guest-btn svg {
+    width: 22px;
+    height: 22px;
+    color: var(--text-secondary);
+}
+
 .divider {
     display: flex;
     align-items: center;

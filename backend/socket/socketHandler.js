@@ -217,11 +217,14 @@ export default function socketHandler(io) {
                 // Guests using DB will just get empty history (since nothing saved)
                 if (currentUserId) {
                     if (useDatabase) {
+                        // Fetch only last 50 messages for initial load
                         const messages = await Chat.find({ sessionId })
-                            .sort({ createdAt: 1 })
+                            .sort({ createdAt: -1 }) // Get newest first
+                            .limit(50)
                             .populate('userId', 'name avatar'); // Populate sender info
 
-                        history = messages.map(m => ({
+                        // Reverse to be chronological
+                        history = messages.reverse().map(m => ({
                             id: m.messageId,
                             role: m.role,
                             content: m.content,
@@ -236,12 +239,85 @@ export default function socketHandler(io) {
                     } else {
                         const session = sessionStorage.get(sessionId);
                         history = session?.messages || [];
+                        // Limit memory history too if needed, but less critical
                     }
                 }
                 socket.emit('session_history', history);
             } catch (err) {
                 console.error('Error loading history:', err);
                 socket.emit('session_history', []);
+            }
+        });
+
+        socket.on('fetch_history', async (data) => {
+            const { sessionId, beforeId, limit = 50 } = data;
+            if (!sessionId || !beforeId) return;
+
+            try {
+                if (useDatabase) {
+                    // Find the message to pivot from
+                    const pivotMsg = await Chat.findOne({ messageId: beforeId }).select('createdAt');
+                    if (!pivotMsg) {
+                        socket.emit('history_chunk', { sessionId, messages: [], hasMore: false });
+                        return;
+                    }
+
+                    const messages = await Chat.find({
+                        sessionId,
+                        createdAt: { $lt: pivotMsg.createdAt }
+                    })
+                        .sort({ createdAt: -1 })
+                        .limit(limit)
+                        .populate('userId', 'name avatar');
+
+                    const history = messages.reverse().map(m => ({
+                        id: m.messageId,
+                        role: m.role,
+                        content: m.content,
+                        sender: m.role === 'USER' && m.userId && m.userId._id ? {
+                            name: m.userId.name,
+                            avatar: m.userId.avatar
+                        } : undefined,
+                        tokensUsed: m.tokensUsed || 0,
+                        aiResponses: m.aiResponses || [],
+                        createdAt: m.createdAt
+                    }));
+
+                    // Check if there are more
+                    let hasMore = false;
+                    if (messages.length === limit) {
+                        // Check if there is anything older than the oldest message we just fetched
+                        // The oldest message in 'messages' (which is sorted -1) is the LAST one in the list (index length-1)
+                        const oldestMsg = messages[0]; // wait. 
+                        // messages: [newest ... oldest] (because sort -1)
+                        // reversed for history: [oldest ... newest]
+
+                        // In 'messages' (from DB sort -1):
+                        // index 0: 2nd newest (closest to pivot)
+                        // index last: oldest
+
+                        // Actually:
+                        // 10 messages. 
+                        // 10 (newest) ... 1 (oldest).
+                        // Pivot is 15.
+                        // query < 15, sort -1 limit 5.
+                        // Result: 14, 13, 12, 11, 10.
+                        // history (reversed): 10, 11, 12, 13, 14.
+
+                        // Oldest fetched is 10. (index last in 'messages', index 0 in 'history')
+
+                        const oldestInBatch = messages[messages.length - 1]; // This is 10.
+                        const olderCount = await Chat.countDocuments({
+                            sessionId,
+                            createdAt: { $lt: oldestInBatch.createdAt }
+                        });
+                        hasMore = olderCount > 0;
+                    }
+
+                    socket.emit('history_chunk', { sessionId, messages: history, hasMore });
+                }
+            } catch (err) {
+                console.error('Error fetching history chunk:', err);
             }
         });
 
@@ -345,7 +421,7 @@ export default function socketHandler(io) {
                     guestId: effectiveGuestId,
                     createdAt: new Date()
                 });
-                
+
             } catch (err) {
                 socket.emit('message_saved', { id: messageId, stored: 'failed', error: err.message });
             }

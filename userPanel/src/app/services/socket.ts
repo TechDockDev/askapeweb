@@ -82,6 +82,11 @@ class SocketService {
         this.socket.emit('message', { sessionId, message, modelIds, userId, guestId });
     }
 
+    public fetchHistory(sessionId: string, beforeId: string, limit: number = 20) {
+        if (!this.socket) return;
+        this.socket.emit('fetch_history', { sessionId, beforeId, limit });
+    }
+
     public emitInputChange(sessionId: string, content: string, userId?: string) {
         if (!this.socket) return;
         this.socket.emit('input_change', { sessionId, content, userId });

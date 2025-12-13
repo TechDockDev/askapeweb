@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, Suspense, useLayoutEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,6 +9,7 @@ import api from '../config/api';
 import './chat.css';
 import { useTheme } from '../providers/ThemeProvider';
 import AddMembersModal from './components/AddMembersModal';
+import LogoutModal from './components/LogoutModal';
 
 interface ChatMessage {
   id?: string;
@@ -55,9 +56,13 @@ function ChatContent() {
   const [toast, setToast] = useState({ show: false, message: '' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<{ id: string, name: string }[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const initialLoadDone = useRef(false);
 
   // Refs
@@ -66,6 +71,8 @@ function ChatContent() {
   const messagesRef = useRef<ChatMessage[]>([]); // Ref to access latest state in callbacks
   const currentChatIdRef = useRef<string | null>(null); // Ref for socket handlers
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prevScrollHeightRef = useRef<number>(0);
+  const isAutoScrollingRef = useRef(false);
 
   // Sync ref with state
   useEffect(() => {
@@ -122,6 +129,14 @@ function ChatContent() {
     // Load user
     const savedUser = localStorage.getItem('user');
     const userData = savedUser ? JSON.parse(savedUser) : null;
+    const isGuest = localStorage.getItem('askape_is_guest');
+
+    // Auth Check
+    if (!userData && !isGuest) {
+      router.push('/login');
+      return;
+    }
+
     setUser(userData);
 
     // Initial session fetch
@@ -251,7 +266,50 @@ function ChatContent() {
         // Only set messages if we have history, otherwise keep empty for new chat
         if (formattedHistory.length > 0) {
           setCurrentMessages(formattedHistory);
+          // Allow pagination if we got a full batch (approx 50)
+          setHasMoreHistory(formattedHistory.length >= 50);
+        } else {
+          setCurrentMessages([]);
+          setHasMoreHistory(false);
         }
+        setIsLoadingMore(false);
+      });
+
+      socket.on('history_chunk', (data: { sessionId: string, messages: any[], hasMore: boolean }) => {
+        if (currentChatIdRef.current && data.sessionId !== currentChatIdRef.current) return;
+
+        console.log('Received history chunk:', data.messages.length, 'hasMore:', data.hasMore);
+
+        const formattedChunk: ChatMessage[] = [];
+        for (let i = 0; i < data.messages.length; i++) {
+          const msg = data.messages[i];
+          if (msg.role === 'USER') {
+            const nextMsg = data.messages[i + 1];
+            const aiResponses = (nextMsg && nextMsg.role === 'AI') ? (nextMsg.aiResponses || []) : [];
+
+            formattedChunk.push({
+              id: msg.id,
+              userId: msg.sender && msg.role === 'USER' && msg.userId && msg.userId._id ? msg.userId._id : undefined,
+              prompt: msg.content,
+              sender: msg.sender,
+              timestamp: msg.createdAt ? new Date(msg.createdAt).getTime() : undefined,
+              responses: aiResponses.map((r: any) => ({
+                model: r.modelId,
+                modelName: r.modelId?.split('/').pop() || 'Model',
+                content: r.content,
+                isComplete: true
+              }))
+            });
+          }
+        }
+
+        if (formattedChunk.length > 0) {
+          setCurrentMessages(prev => [...formattedChunk, ...prev]);
+        }
+        setHasMoreHistory(data.hasMore);
+        setIsLoadingMore(false);
+
+        // Scroll restoration happens in useLayoutEffect
       });
 
       socket.on('message_saved', (data) => {
@@ -413,6 +471,17 @@ function ChatContent() {
       const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
       const userId = savedUser ? savedUser.id : undefined;
 
+      const token = localStorage.getItem('token');
+      if (savedUser && token) {
+        setUser(savedUser);
+      } else {
+        // Check for guest flag
+        const isGuest = localStorage.getItem('askape_is_guest');
+        if (!isGuest) {
+          router.push('/login');
+        }
+      }
+
       console.log('🔗 Joining session from URL:', urlChatId);
       setCurrentChatId(urlChatId);
       socketService.joinSession(urlChatId, userId, guestId);
@@ -423,15 +492,76 @@ function ChatContent() {
     };
   }, []); // Run once on mount
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    if (chatDisplayRef.current) {
-      chatDisplayRef.current.scrollTo({
-        top: chatDisplayRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+  // Auto-scroll logic
+  useLayoutEffect(() => {
+    if (!chatDisplayRef.current) return;
+
+    const container = chatDisplayRef.current;
+
+    // Check if we are prepending messages (pagination)
+    if (isLoadingMore) {
+      // We are waiting for data, do nothing yet
+      return;
     }
-  }, [currentMessages]);
+
+    // Logic to distinguish between "new message appended" vs "old messages prepended"
+    // We utilize the prevScrollHeightRef
+
+    const newScrollHeight = container.scrollHeight;
+    const scrollDiff = newScrollHeight - prevScrollHeightRef.current;
+
+    // If we just loaded more history (and we were at top), restore position
+    // We check if the scrollHeight has grown significantly and we were near top
+    if (container.scrollTop === 0 && scrollDiff > 0 && messagesRef.current.length > 0) {
+      // Restore scroll position
+      container.scrollTop = scrollDiff;
+    } else {
+      // Normal auto-scroll to bottom for new messages
+      // Only scroll if we were already near bottom OR it's a new generation
+      // Or blindly scroll to bottom if it's initial load. 
+      // Let's assume on new message append we want to view it.
+
+      // Simple heuristic: If scrollHeight grew and we didn't prepend (implied by scrollTop not being 0 or checking manually)
+      // Actually, cleaner way:
+      if (prevScrollHeightRef.current === 0 || isAutoScrollingRef.current) {
+        container.scrollTop = container.scrollHeight;
+        isAutoScrollingRef.current = false;
+      } else {
+        // Smooth scroll to bottom
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      }
+    }
+
+    prevScrollHeightRef.current = newScrollHeight;
+  }, [currentMessages, isLoadingMore]);
+
+  // Handle scroll for pagination
+  const handleScroll = () => {
+    if (!chatDisplayRef.current) return;
+    const { scrollTop } = chatDisplayRef.current;
+
+    if (scrollTop === 0 && hasMoreHistory && !isLoadingMore && currentMessages.length > 0) {
+      console.log('Reached top, fetching older history...');
+      setIsLoadingMore(true);
+      prevScrollHeightRef.current = chatDisplayRef.current.scrollHeight; // Save before fetch
+
+      const outputMsg = currentMessages[0];
+      // We need the USER message ID.
+      // Be careful: currentMessages structure.
+      // We need to pass the ID of the oldest message we have.
+      // currentMessages[0] is the oldest visible.
+      if (outputMsg && outputMsg.id) {
+        socketService.fetchHistory(currentChatId!, outputMsg.id);
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Reset auto-scrolling flag on chat switch
+    isAutoScrollingRef.current = true;
+    setHasMoreHistory(true); // Reset expectation
+    prevScrollHeightRef.current = 0;
+  }, [currentChatId]);
 
 
   const handleThemeToggle = () => {
@@ -511,16 +641,18 @@ function ChatContent() {
 
   const handleUserClick = () => {
     if (user) {
-      if (confirm('Do you want to logout?')) {
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        setUser(null);
-        showToast('Logged out successfully');
-        window.location.reload();
-      }
+      setIsLogoutModalOpen(true);
     } else {
       router.push('/login');
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    setUser(null);
+    showToast('Logged out successfully');
+    window.location.reload();
   };
 
   const sendRequest = async () => {
@@ -800,75 +932,120 @@ function ChatContent() {
 
       {/* Main Content */}
       <div className="main-container">
-        <div className="sticky-header">
-          <div className="header-top">
-            <div className="flex items-center gap-3">
-              <button className="hamburger-menu" onClick={toggleSidebar}>
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-
-              {participants.length > 0 && (
-                <div className="flex items-center gap-2 ml-4">
-                  <div className="flex -space-x-2">
-                    {participants.slice(0, 3).map((p, i) => (
-                      <div key={i} className="w-8 h-8 rounded-full border-2 border-[#121212] bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase" title={p.name}>
-                        {p.avatar || p.name.charAt(0)}
-                      </div>
+        <div className="sticky-header flex items-center justify-between px-4 py-3 bg-[#1e1e1e] border-b border-[#333]">
+          {/* Left Side: Model Selector */}
+          <div className="model-selector relative z-50">
+            <button
+              className={`flex items-center gap-2 bg-transparent hover:bg-white/5 !px-3 !py-2 rounded-lg text-gray-300 text-sm font-medium transition-all border ${isModelDropdownOpen ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-400' : 'border-gray-700 hover:border-gray-600'}`}
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+            >
+              <div className="flex items-center gap-2">
+                {selectedModels.length > 0 && (
+                  <div className="flex -space-x-1">
+                    {selectedModels.slice(0, 2).map(m => (
+                      <div key={m} className="!w-5 !h-5 rounded-full bg-violet-500 ring-1 ring-[#1e1e1e]" />
                     ))}
-                    {participants.length > 3 && (
-                      <div className="w-8 h-8 rounded-full border-2 border-[#121212] bg-gray-700 flex items-center justify-center text-xs text-white">
-                        +{participants.length - 3}
-                      </div>
-                    )}
                   </div>
-                  {user && (
-                    <button
-                      onClick={() => setIsAddMemberOpen(true)}
-                      className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-colors border border-dashed border-gray-600"
-                      title="Add people"
+                )}
+                <span className="text-violet-500">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
+              </div>
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''} opacity-70`}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isModelDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsModelDropdownOpen(false)} />
+                <div className="absolute top-full left-0 !mt-2 w-72 bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-left">
+                  <div className="!px-2 !py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest !mb-1 !ml-1">
+                    Available Models
+                  </div>
+                  {[
+                    { id: 'deepseek', value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3', 
+                      // desc: 'Thinking Model' 
+                    },
+                    { id: 'llama', value: 'meta-llama/Llama-3.2-3B-Instruct', label: 'Llama 3.2', 
+                      // desc: 'Fast & Lightweight' 
+                    },
+                    { id: 'qwen', value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen Coder', 
+                      // desc: 'Coding Specialist' 
+                    }
+                  ].map(model => (
+                    <div
+                      key={model.id}
+                      className={`flex items-start gap-3 !p-2.5 rounded-lg cursor-pointer transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500/10 border border-indigo-500/20' : 'hover:bg-white/5 border border-transparent'}`}
+                      onClick={() => {
+                        if (selectedModels.includes(model.value)) {
+                          setSelectedModels(selectedModels.filter(m => m !== model.value));
+                        } else {
+                          setSelectedModels([...selectedModels, model.value]);
+                        }
+                      }}
                     >
-                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </button>
+                      <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-600 bg-transparent'}`}>
+                        {selectedModels.includes(model.value) && (
+                          <svg width="12" height="12" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className={`text-sm font-medium ${selectedModels.includes(model.value) ? 'text-indigo-300' : 'text-gray-200'}`}>{model.label}</span>
+                        {/* <span className="text-xs text-gray-500">{model?.desc}</span> */}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Right Side: Hamburger + Members */}
+          <div className="flex items-center gap-4 flex-row-reverse">
+            <button className="hamburger-menu p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors text-gray-400 hover:text-white" onClick={toggleSidebar}>
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+
+            {participants.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {participants.slice(0, 3).map((p, i) => (
+                    <div key={i} className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase shadow-sm" title={p.name}>
+                      {p.avatar || p.name.charAt(0)}
+                    </div>
+                  ))}
+                  {participants.length > 3 && (
+                    <div className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gray-700 flex items-center justify-center text-xs text-white shadow-sm">
+                      +{participants.length - 3}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="model-selector">
-            {[
-              { id: 'deepseek', value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
-              { id: 'llama', value: 'meta-llama/Llama-3.2-3B-Instruct', label: 'Llama 3.2' },
-              { id: 'qwen', value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen Coder' }
-            ].map(model => (
-              <div key={model.id} className="model-chip">
-                <input
-                  type="checkbox"
-                  id={model.id}
-                  value={model.value}
-                  checked={selectedModels.includes(model.value)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedModels([...selectedModels, model.value]);
-                    } else {
-                      setSelectedModels(selectedModels.filter(m => m !== model.value));
-                    }
-                  }}
-                />
-                <label htmlFor={model.id}>
-                  <span className="model-indicator"></span>
-                  {model.label}
-                </label>
+                {user && (
+                  <button
+                    onClick={() => setIsAddMemberOpen(true)}
+                    className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-all border border-dashed border-gray-600 hover:border-gray-400"
+                    title="Add people"
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </button>
+                )}
               </div>
-            ))}
+            )}
           </div>
         </div>
 
         <main className="main">
-          <div className="chat-history" ref={chatDisplayRef}>
+          <div className="chat-history" ref={chatDisplayRef} onScroll={handleScroll}>
+            {isLoadingMore && (
+              <div className="flex justify-center p-2">
+                <span className="text-xs text-gray-500">Loading history...</span>
+              </div>
+            )}
             {currentMessages.length === 0 ? (
               <div className="empty-state">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -900,7 +1077,7 @@ function ChatContent() {
                           <span className="text-xs font-semibold text-gray-400">{turn.sender.name}</span>
                           {turn.timestamp && <span className="text-[10px] text-gray-500">{new Date(turn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
                         </div>
-                        <div className="bg-[#2a2a2a] p-3 rounded-2xl rounded-tl-none text-gray-200 text-sm shadow-md border border-[#333]">
+                        <div className="bg-[#ffffffb0] !p-2.5 rounded-2xl text-gray-600 text-sm shadow-lg border border-gray-200 !mb-2">
                           {turn.prompt}
                         </div>
                       </div>
@@ -916,7 +1093,7 @@ function ChatContent() {
                       The user request image looks like a Group Chat context.
                       I'll default to Right align for "My" messages.
                       */}
-                        <div className={`user-message !mb-0 !max-w-full bg-[#1e1e1e] border-[#333] ${participants.length > 0 ? '!bg-[#1a1a1a] !rounded-br-none !text-right' : ''}`}>
+                        <div className={`user-message !mb-10 !max-w-full ${participants.length > 0 ? ' !text-right' : ''}`}>
                           {/* Label */}
                           {!participants.length && <div className="user-message-label">You</div>}
                           <div className={`user-message-text ${participants.length > 0 ? 'text-gray-300' : ''}`}>{turn.prompt}</div>
@@ -1020,6 +1197,11 @@ function ChatContent() {
         />
       )
       }
+      <LogoutModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onLogout={handleLogout}
+      />
     </>
   );
 }
