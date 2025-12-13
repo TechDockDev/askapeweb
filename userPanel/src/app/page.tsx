@@ -393,7 +393,8 @@ function ChatContent() {
 
       const userData = JSON.parse(savedUser);
       // Call API to join
-      api.post(`/api/chat/sessions/${joinId}/participants`, { userId: userData.id })
+      // /api - removed 
+      api.post(`/chat/sessions/${joinId}/participants`, { userId: userData.id })
         .then(() => {
           showToast('Joined conversation');
           router.push(`/?chatId=${joinId}`);
