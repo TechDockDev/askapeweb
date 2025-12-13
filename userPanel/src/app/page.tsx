@@ -933,82 +933,71 @@ function ChatContent() {
       {/* Main Content */}
       <div className="main-container">
         <div className="sticky-header flex items-center justify-between px-4 py-3 bg-[#1e1e1e] border-b border-[#333]">
-          {/* Left Side: Model Selector */}
-          <div className="model-selector relative z-50">
-            <button
-              className={`flex items-center gap-2 bg-transparent hover:bg-white/5 !px-3 !py-2 rounded-lg text-gray-300 text-sm font-medium transition-all border ${isModelDropdownOpen ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-400' : 'border-gray-700 hover:border-gray-600'}`}
-              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-            >
-              <div className="flex items-center gap-2">
-                {selectedModels.length > 0 && (
-                  <div className="flex -space-x-1">
-                    {selectedModels.slice(0, 2).map(m => (
-                      <div key={m} className="!w-5 !h-5 rounded-full bg-violet-500 ring-1 ring-[#1e1e1e]" />
+          {/* Left Side: Model Selector - w-1/3 */}
+          <div className="w-1/3 flex justify-start">
+            <div className="model-selector relative z-50">
+              <button
+                className={`flex items-center gap-2 bg-transparent hover:bg-white/5 !px-3 !py-2 rounded-lg text-gray-300 text-sm font-medium transition-all border ${isModelDropdownOpen ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-400' : 'border-gray-700 hover:border-gray-600'}`}
+                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              >
+                <div className="flex items-center gap-2">
+                  {selectedModels.length > 0 && (
+                    <div className="flex -space-x-1">
+                      {selectedModels.slice(0, 2).map(m => (
+                        <div key={m} className="!w-5 !h-5 rounded-full bg-violet-500 ring-1 ring-[#1e1e1e]" />
+                      ))}
+                    </div>
+                  )}
+                  <span className="text-violet-500">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
+                </div>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''} opacity-70`}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {isModelDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsModelDropdownOpen(false)} />
+                  <div className="absolute top-full left-0 !mt-2 w-72 bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-left">
+                    <div className="!px-2 !py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest !mb-1 !ml-1">
+                      Available Models
+                    </div>
+                    {[
+                      { id: 'deepseek', value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
+                      { id: 'llama', value: 'meta-llama/Llama-3.2-3B-Instruct', label: 'Llama 3.2' },
+                      { id: 'qwen', value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen Coder' }
+                    ].map(model => (
+                      <div
+                        key={model.id}
+                        className={`flex items-start gap-3 !p-2.5 rounded-lg cursor-pointer transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500/10 border border-indigo-500/20' : 'hover:bg-white/5 border border-transparent'}`}
+                        onClick={() => {
+                          if (selectedModels.includes(model.value)) {
+                            setSelectedModels(selectedModels.filter(m => m !== model.value));
+                          } else {
+                            setSelectedModels([...selectedModels, model.value]);
+                          }
+                        }}
+                      >
+                        <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-600 bg-transparent'}`}>
+                          {selectedModels.includes(model.value) && (
+                            <svg width="12" height="12" fill="none" stroke="white" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-medium ${selectedModels.includes(model.value) ? 'text-indigo-300' : 'text-gray-200'}`}>{model.label}</span>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                )}
-                <span className="text-violet-500">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
-              </div>
-              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''} opacity-70`}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isModelDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setIsModelDropdownOpen(false)} />
-                <div className="absolute top-full left-0 !mt-2 w-72 bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-left">
-                  <div className="!px-2 !py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest !mb-1 !ml-1">
-                    Available Models
-                  </div>
-                  {[
-                    { id: 'deepseek', value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3', 
-                      // desc: 'Thinking Model' 
-                    },
-                    { id: 'llama', value: 'meta-llama/Llama-3.2-3B-Instruct', label: 'Llama 3.2', 
-                      // desc: 'Fast & Lightweight' 
-                    },
-                    { id: 'qwen', value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen Coder', 
-                      // desc: 'Coding Specialist' 
-                    }
-                  ].map(model => (
-                    <div
-                      key={model.id}
-                      className={`flex items-start gap-3 !p-2.5 rounded-lg cursor-pointer transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500/10 border border-indigo-500/20' : 'hover:bg-white/5 border border-transparent'}`}
-                      onClick={() => {
-                        if (selectedModels.includes(model.value)) {
-                          setSelectedModels(selectedModels.filter(m => m !== model.value));
-                        } else {
-                          setSelectedModels([...selectedModels, model.value]);
-                        }
-                      }}
-                    >
-                      <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-600 bg-transparent'}`}>
-                        {selectedModels.includes(model.value) && (
-                          <svg width="12" height="12" fill="none" stroke="white" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className={`text-sm font-medium ${selectedModels.includes(model.value) ? 'text-indigo-300' : 'text-gray-200'}`}>{model.label}</span>
-                        {/* <span className="text-xs text-gray-500">{model?.desc}</span> */}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Right Side: Hamburger + Members */}
-          <div className="flex items-center gap-4 flex-row-reverse">
-            <button className="hamburger-menu p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors text-gray-400 hover:text-white" onClick={toggleSidebar}>
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-
+          {/* Center: Members List - w-1/3 */}
+          <div className="w-1/3 flex justify-center">
             {participants.length > 0 && (
               <div className="flex items-center gap-2">
                 <div className="flex -space-x-2">
@@ -1036,6 +1025,15 @@ function ChatContent() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Right Side: Hamburger - w-1/3 */}
+          <div className="w-1/3 flex justify-end">
+            <button className="hamburger-menu p-2 hover:bg-[#2a2a2a] rounded-lg transition-colors text-gray-400 hover:text-white" onClick={toggleSidebar}>
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
           </div>
         </div>
 
