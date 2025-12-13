@@ -2,7 +2,7 @@ const HF_TOKEN = process.env.HF_ACCESS_TOKEN;
 
 export async function queryHuggingFaceChat(model, messages, options = {}) {
     const API_URL = 'https://router.huggingface.co/v1/chat/completions';
-    const { maxTokens = 1000, temperature = 0.7 } = options;
+    const { maxTokens = 4000, temperature = 0.7 } = options;
 
     // Ensure messages is an array of {role, content}
     const chatMessages = Array.isArray(messages)
@@ -38,7 +38,7 @@ export async function queryHuggingFaceChat(model, messages, options = {}) {
 
 export async function queryHuggingFaceStream(model, messages, onChunk, options = {}) {
     const API_URL = 'https://router.huggingface.co/v1/chat/completions';
-    const { maxTokens = 1000, temperature = 0.7 } = options;
+    const { maxTokens = 4000, temperature = 0.7 } = options;
 
     // Ensure messages is an array of {role, content}
     const chatMessages = Array.isArray(messages)
