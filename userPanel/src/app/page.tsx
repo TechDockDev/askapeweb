@@ -97,7 +97,8 @@ function ChatContent() {
     if (!guestId && !userId) return;
 
     try {
-      const res = await api.get('/api/chat/sessions', {
+      //api - removed
+      const res = await api.get('/chat/sessions', {
         params: { userId }
       });
       const data = res.data;
@@ -496,7 +497,8 @@ function ChatContent() {
     setAllChats(updatedChats);
 
     try {
-      await api.delete(`/api/chat/sessions/${chatId}`);
+      // /api - removed
+      await api.delete(`/chat/sessions/${chatId}`);
       showToast('Chat deleted');
     } catch (err) {
       showToast('Failed to delete chat');

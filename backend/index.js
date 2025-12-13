@@ -63,16 +63,17 @@ connectDB(MONGODB_URI).then((connected) => {
     setAuthUserStorage(userStorage);
 
     // Fix for double api prefix (redirect /api/api/... to /api/...)
-    app.use((req, res, next) => {
-        if (req.url.startsWith('/api/api/')) {
-            const newPath = req.url.replace('/api/api/', '/api/');
-            return res.redirect(307, newPath);
-        }
-        next();
-    });
+    // app.use((req, res, next) => {
+    //     if (req.url.startsWith('/api/api/')) {
+    //         const newPath = req.url.replace('/api/api/', '/api/');
+    //         return res.redirect(307, newPath);
+    //     }
+    //     next();
+    // });
 
     // Routes
     app.use('/api/auth', authRoutes);
+    // app.use('/auth', authRoutes);
     app.use('/api/chat', chatRoutes);
     app.use('/api', userRoutes);
     app.use('/api/admin', adminRoutes);

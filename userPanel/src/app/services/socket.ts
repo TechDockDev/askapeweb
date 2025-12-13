@@ -2,16 +2,17 @@ import { io, Socket } from 'socket.io-client';
 
 import { API_BASE_URL } from '../../config/api';
 
+// const SOCKET_URL = API_BASE_URL;
+const SOCKET_URL = API_BASE_URL.replace('/api', '');
 // Define the socket URL
-// Define the socket URL
-const SOCKET_URL = 'wss://askape.apeitnow.com';
+// const SOCKET_URL = 'wss://askape.apeitnow.com';
 
 // Connection options
 const SOCKET_OPTIONS = {
-    path: '/socket.io',
-    transports: ['websocket'], // Force websocket only to avoid polling issues with Nginx
-    secure: true,
-    rejectUnauthorized: false,
+    // path: '/socket.io',
+    transports: ['websocket', 'polling'], // Force websocket only to avoid polling issues with Nginx
+    // secure: true,
+    // rejectUnauthorized: false,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     autoConnect: false // We'll connect manually when component mounts
