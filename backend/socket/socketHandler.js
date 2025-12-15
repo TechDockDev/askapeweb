@@ -229,6 +229,7 @@ export default function socketHandler(io) {
                             role: m.role,
                             content: m.content,
                             sender: m.role === 'USER' && m.userId && m.userId._id ? {
+                                senderId: m.userId._id,
                                 name: m.userId.name,
                                 avatar: m.userId.avatar
                             } : undefined,
@@ -275,6 +276,7 @@ export default function socketHandler(io) {
                         role: m.role,
                         content: m.content,
                         sender: m.role === 'USER' && m.userId && m.userId._id ? {
+                            senderId: m.userId._id,
                             name: m.userId.name,
                             avatar: m.userId.avatar
                         } : undefined,
@@ -408,7 +410,7 @@ export default function socketHandler(io) {
                 if (useDatabase && effectiveUserId) {
                     const sender = await User.findById(effectiveUserId).select('name avatar');
                     if (sender) {
-                        senderInfo = { name: sender.name, avatar: sender.avatar };
+                        senderInfo = { senderId: sender._id, name: sender.name, avatar: sender.avatar };
                     }
                 }
 
