@@ -605,8 +605,8 @@ function ChatContent() {
     setPrompt(''); // Clear input
     setIsGenerating(false); // Reset generation state
 
-    // Clear URL
-    router.push('/');
+    // Update URL to persist session on refresh
+    router.push(`/?chatId=${newId}`);
 
     // Join new session on socket
     const guestId = localStorage.getItem('askape_guest_id') || undefined;
@@ -998,31 +998,31 @@ function ChatContent() {
 
           {/* Center: Members List - w-1/3 */}
           <div className="w-1/3 flex justify-center">
-            {participants.length > 0 && (
+            {currentChatId && (
               <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {participants.slice(0, 3).map((p, i) => (
-                    <div key={i} className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase shadow-sm" title={p.name}>
-                      {p.avatar || p.name.charAt(0)}
-                    </div>
-                  ))}
-                  {participants.length > 3 && (
-                    <div className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gray-700 flex items-center justify-center text-xs text-white shadow-sm">
-                      +{participants.length - 3}
-                    </div>
-                  )}
-                </div>
-                {user && (
-                  <button
-                    onClick={() => setIsAddMemberOpen(true)}
-                    className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-all border border-dashed border-gray-600 hover:border-gray-400"
-                    title="Add people"
-                  >
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </button>
+                {participants.length > 0 && (
+                  <div className="flex -space-x-2">
+                    {participants.slice(0, 3).map((p, i) => (
+                      <div key={i} className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase shadow-sm" title={p.name}>
+                        {p.avatar || p.name.charAt(0)}
+                      </div>
+                    ))}
+                    {participants.length > 3 && (
+                      <div className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gray-700 flex items-center justify-center text-xs text-white shadow-sm">
+                        +{participants.length - 3}
+                      </div>
+                    )}
+                  </div>
                 )}
+                <button
+                  onClick={() => setIsAddMemberOpen(true)}
+                  className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-all border border-dashed border-gray-600 hover:border-gray-400"
+                  title="Add people"
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </button>
               </div>
             )}
           </div>
