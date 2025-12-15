@@ -108,6 +108,7 @@ export const getSessionHistory = async (req, res) => {
                 content: m.content,
                 toeknsUsed: m.tokensUsed || 0,
                 sender: m.role === 'USER' && m.userId && m.userId._id ? {
+                    senderId: m.userId._id, // Added senderId
                     name: m.userId.name,
                     avatar: m.userId.avatar
                 } : undefined,
