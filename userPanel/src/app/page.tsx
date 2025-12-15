@@ -1063,7 +1063,7 @@ function ChatContent() {
                     // console.log(`Turn ${turnIdx}: isGroup=${isGroup} (${participants.length}), isOther=${isOther}, hasSender=${hasSender}`, turn);
                     return null;
                   })()}
-                  {participants.length > 0 && turn.userId !== user?.id && turn.sender ? (
+                  {turn.userId !== user?.id && turn.sender ? (
                     // Group Chat - Message from Others (Left aligned, Avatar + Name)
                     <div className="flex gap-3 mb-4 w-full justify-start">
                       <div className="flex-shrink-0 mt-1">
