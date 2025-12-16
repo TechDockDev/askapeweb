@@ -14,9 +14,9 @@ export default function LogoutModal({ isOpen, onClose, onLogout }: LogoutModalPr
             {/* Glass Container */}
             <div className="relative w-full max-w-sm mx-4">
                 {/* Background Blobs for Glass Effect */}
-                <div className="absolute -top-20 -left-20 w-40 h-40 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+                <div className="absolute -top-20 -left-20 w-40 h-40 bg-lime-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
                 <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-                <div className="absolute top-20 right-20 w-40 h-40 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+                <div className="absolute top-20 right-20 w-40 h-40 bg-black/90 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
 
                 <div className="relative bg-white/10 dark:bg-black/80 backdrop-blur-5xl border border-white/20 dark:border-white/10 rounded-2xl !p-6 shadow-2xl overflow-hidden ring-1 ring-black/5">
 
@@ -31,7 +31,7 @@ export default function LogoutModal({ isOpen, onClose, onLogout }: LogoutModalPr
 
                     <div className="flex flex-col items-center !mb-6 relative z-10">
                         <div className="w-16 h-16 bg-gradient-to-br from-blue-500/20 to-violet-500/20 rounded-2xl flex items-center justify-center mb-4 text-red-500 shadow-lg backdrop-blur-md border border-white/10">
-                            <svg width="32" height="32" fill="none" stroke="#9A58F7" viewBox="0 0 24 24">
+                            <svg width="32" height="32" fill="none" stroke="#c8ff00ff" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
                         </div>
@@ -50,7 +50,7 @@ export default function LogoutModal({ isOpen, onClose, onLogout }: LogoutModalPr
                         </button>
                         <button
                             onClick={onLogout}
-                            className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-[#7c3aed] to-[#a855f7] hover:from-blue-400 hover:to-violet-500 text-white shadow-lg shadow-blue-500/20 border border-white/10 transition-all duration-200 cursor-pointer"
+                            className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-[#DFFF00] to-lime-500 hover:from-lime-500 hover:to-[#DFFF00] text-black shadow-lg shadow-blue-500/20 border border-white/10 transition-all duration-200 cursor-pointer"
                         >
                             Sign Out
                         </button>
