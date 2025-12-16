@@ -10,6 +10,8 @@ import './chat.css';
 import { useTheme } from '../providers/ThemeProvider';
 import AddMembersModal from './components/AddMembersModal';
 import LogoutModal from './components/LogoutModal';
+import Sidebar from './components/Sidebar';
+import FirstChatSection from './components/FirstChatSection';
 
 interface ChatMessage {
   id?: string;
@@ -749,19 +751,20 @@ function ChatContent() {
       .catch(() => showToast('Failed to copy'));
   };
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-    const chatDate = date.toDateString();
+  // const formatDate = (timestamp: number) => {
+  //   const date = new Date(timestamp);
+  //   const today = new Date().toDateString();
+  //   const yesterday = new Date(Date.now() - 86400000).toDateString();
+  //   const chatDate = date.toDateString();
 
-    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateLabel = chatDate === today ? 'Today' : chatDate === yesterday ? 'Yesterday' : date.toLocaleDateString();
+  //   const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  //   const dateLabel = chatDate === today ? 'Today' : chatDate === yesterday ? 'Yesterday' : date.toLocaleDateString();
 
-    return `${dateLabel} ${timeStr}`;
-  };
+  //   return `${dateLabel} ${timeStr}`;
+  // };
 
   // Helper to load a past chat
+  
   const loadChat = (chatId: string) => {
     setCurrentChatId(chatId);
     setCurrentMessages([]);
@@ -777,189 +780,49 @@ function ChatContent() {
 
   return (
     <>
-      <div
-        className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
-        onClick={closeSidebar}
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={closeSidebar}
+        user={user}
+        onStartNewChat={startNewChat}
+        allChats={allChats}
+        currentChatId={currentChatId}
+        onLoadChat={loadChat}
+        onDeleteChat={deleteChat}
+        onUserClick={handleUserClick}
+        ownerId={ownerId}
+        theme={theme}
+        handleThemeToggle={handleThemeToggle}
       />
-
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-logo">
-          <div className="logo-icon">
-            <svg viewBox="0 0 24 24" fill="white" className="sparkle-icon">
-              <path d="M12 1L13.5 8.5L21 10L13.5 11.5L12 19L10.5 11.5L3 10L10.5 8.5L12 1Z" />
-              <path d="M19 2L19.75 4.25L22 5L19.75 5.75L19 8L18.25 5.75L16 5L18.25 4.25L19 2Z" opacity="0.7" />
-              <path d="M5 16L5.5 17.5L7 18L5.5 18.5L5 20L4.5 18.5L3 18L4.5 17.5L5 16Z" opacity="0.7" />
-            </svg>
-          </div>
-          <span className="logo-text">AskApe</span>
-        </div>
-
-        {user ? (
-          <button className="new-chat-btn" onClick={startNewChat}>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            New Chat
-          </button>
-        ) : (
-          <div className="guest-notice" style={{ padding: '10px 15px', color: '#888', fontSize: '0.9rem', textAlign: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '10px' }}>
-            Login to save history
-          </div>
-        )}
-
-        <div className="history-section">
-          {user && allChats.filter(c => c.participantsCount > 0).length > 0 && (
-            <div className="history-group">
-              <div className="history-header">
-                <span className="history-title">Group chats</span>
-              </div>
-              <div className="history-list">
-                {allChats.filter(c => c.participantsCount > 0).map(chat => (
-                  <div
-                    key={chat.id}
-                    className={`history-item ${chat.id === currentChatId ? 'active' : ''}`}
-                    onClick={() => loadChat(chat.id)}
-                  >
-                    <div className="history-item-icon">
-                      <div className="flex -space-x-1">
-                        <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white border border-[#1e1e1e]">G</div>
-                        {/* Placeholder for group icon */}
-                      </div>
-                    </div>
-                    <div className="history-item-content">
-                      <div className="history-item-title">{chat.title}</div>
-                      <div className="history-item-meta">
-                        <span>{formatDate(chat.timestamp)}</span>
-                      </div>
-                    </div>
-                    {user && ownerId && user.id === ownerId && (
-                      <button className="history-item-delete" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
-                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="history-group">
-            <div className="history-header">
-              <span className="history-title">Your chats</span>
-            </div>
-
-            <div className="history-list">
-              {!user ? (
-                <div className="history-empty">
-                  <p style={{ opacity: 0.6 }}>History is disabled for guest users.</p>
-                </div>
-              ) : allChats.length === 0 ? (
-                <div className="history-empty">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  <p>No chat history yet.<br />Start a new conversation!</p>
-                </div>
-              ) : (
-                allChats.filter(c => c.participantsCount === 0).map(chat => (
-                  <div
-                    key={chat.id}
-                    className={`history-item ${chat.id === currentChatId ? 'active' : ''}`}
-                    onClick={() => loadChat(chat.id)}
-                  >
-                    <div className="history-item-icon">
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                    </div>
-                    <div className="history-item-content">
-                      <div className="history-item-title">{chat.title}</div>
-                      <div className="history-item-meta">
-                        <span>{formatDate(chat.timestamp)}</span>
-                        <span>•</span>
-                        <span>{chat.modelCount} models</span>
-                      </div>
-                    </div>
-                    <button className="history-item-delete" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
-                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        <nav className="sidebar-nav">
-          <a href="/payments" className="nav-item">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
-            <span className="nav-item-text">Payments</span>
-            <span className="nav-item-badge">Pro</span>
-          </a>
-          <div className="theme-toggle">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-            </svg>
-            <span className="theme-toggle-label">Dark Mode</span>
-            <label className="theme-switch">
-              <input type="checkbox" checked={theme === 'dark'} onChange={handleThemeToggle} />
-              <span className="theme-slider"></span>
-            </label>
-          </div>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="user-card" onClick={handleUserClick}>
-            <div className="user-avatar">{user?.avatar || 'G'}</div>
-            <div className="user-info">
-              <div className="user-name">{user?.name || 'Guest User'}</div>
-              <div className="user-email">{user?.email || 'Click to login'}</div>
-            </div>
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-        </div>
-      </aside>
 
       {/* Main Content */}
       <div className="main-container">
-        <div className="sticky-header flex items-center justify-between px-4 py-3 bg-[#1e1e1e] border-b border-[#333]">
+        <div className="sticky-header flex items-center justify-between px-4 py-3 !bg-[#F6F6F6] ">
           {/* Left Side: Model Selector - w-1/3 */}
           <div className="w-1/3 flex justify-start">
             <div className="model-selector relative z-50">
               <button
-                className={`flex items-center gap-2 bg-transparent hover:bg-white/5 !px-3 !py-2 rounded-lg text-gray-300 text-sm font-medium transition-all border ${isModelDropdownOpen ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-400' : 'border-gray-700 hover:border-gray-600'}`}
+                className={`flex items-center gap-2 bg-transparent hover:bg-white/5 !px-3 !py-2 rounded-lg text-gray-300 text-md transition-all border ${isModelDropdownOpen ? 'border-lime-500/50 bg-lime-500/10 text-lime-400' : ' hover:border-gray-600'}`}
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
               >
                 <div className="flex items-center gap-2">
-                  {selectedModels.length > 0 && (
+                  {/* {selectedModels.length > 0 && (
                     <div className="flex -space-x-1">
                       {selectedModels.slice(0, 2).map(m => (
-                        <div key={m} className="!w-5 !h-5 rounded-full bg-violet-500 ring-1 ring-[#1e1e1e]" />
+                        <div key={m} className="!w-5 !h-5 rounded-full bg-[#DFFF00] ring-1 ring-[#1e1e1e]" />
                       ))}
                     </div>
-                  )}
-                  <span className="text-violet-500">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
+                  )} */}
+                  <span className="text-black font-bold">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
                 </div>
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''} opacity-70`}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-chevron-down-icon lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
               </button>
 
               {isModelDropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsModelDropdownOpen(false)} />
-                  <div className="absolute top-full left-0 !mt-2 w-72 bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-left">
-                    <div className="!px-2 !py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest !mb-1 !ml-1">
+                  <div className="absolute top-full left-0 !mt-2 w-72 bg-black border border-gray-700 rounded-xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200 origin-top-left">
+                    <div className="!px-2 !py-1.5 text-[10px] font-bold text-white uppercase tracking-widest !mb-1 !ml-1">
                       Available Models
                     </div>
                     {[
@@ -978,7 +841,7 @@ function ChatContent() {
                           }
                         }}
                       >
-                        <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-all ${selectedModels.includes(model.value) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-600 bg-transparent'}`}>
+                        <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-all ${selectedModels.includes(model.value) ? 'bg-lime-500 border-lime-300' : 'border-lime-600 bg-transparent'}`}>
                           {selectedModels.includes(model.value) && (
                             <svg width="12" height="12" fill="none" stroke="white" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
@@ -986,7 +849,7 @@ function ChatContent() {
                           )}
                         </div>
                         <div className="flex flex-col">
-                          <span className={`text-sm font-medium ${selectedModels.includes(model.value) ? 'text-indigo-300' : 'text-gray-200'}`}>{model.label}</span>
+                          <span className={`text-sm font-medium ${selectedModels.includes(model.value) ? 'text-lime-100' : 'text-gray-200'}`}>{model.label}</span>
                         </div>
                       </div>
                     ))}
@@ -1003,12 +866,12 @@ function ChatContent() {
                 {participants.length > 0 && (
                   <div className="flex -space-x-2">
                     {participants.slice(0, 3).map((p, i) => (
-                      <div key={i} className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white uppercase shadow-sm" title={p.name}>
+                      <div key={i} className="w-8 h-8 rounded-full border-1 border-[#1e1e1e] bg-gradient-to-br from-[#CCFF01] to-[#CCFF01] flex items-center justify-center text-xs text-black font-bold uppercase shadow-sm" title={p.name}>
                         {p.avatar || p.name.charAt(0)}
                       </div>
                     ))}
                     {participants.length > 3 && (
-                      <div className="w-8 h-8 rounded-full border-2 border-[#1e1e1e] bg-gray-700 flex items-center justify-center text-xs text-white shadow-sm">
+                      <div className="!w-8 !h-8 rounded-full border-1 border-[#1e1e1e] bg-gray-700 flex items-center justify-center text-xs text-black shadow-sm">
                         +{participants.length - 3}
                       </div>
                     )}
@@ -1016,10 +879,9 @@ function ChatContent() {
                 )}
                 <button
                   onClick={() => setIsAddMemberOpen(true)}
-                  className="w-8 h-8 rounded-full bg-[#2a2a2a] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-all border border-dashed border-gray-600 hover:border-gray-400"
+                  className="!w-8 !h-8 rounded-full bg-[#DFFF00] hover:bg-[#333] flex items-center justify-center text-gray-400 hover:text-white transition-all border border-dashed border-gray-600 hover:border-gray-400"
                   title="Add people"
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                >                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                 </button>
@@ -1038,7 +900,7 @@ function ChatContent() {
           </div>
         </div>
 
-        <main className="main">
+        <main className="main bg-[#F6F6F6]">
           <div className="chat-history" ref={chatDisplayRef} onScroll={handleScroll}>
             {isLoadingMore && (
               <div className="flex justify-center p-2">
@@ -1046,13 +908,15 @@ function ChatContent() {
               </div>
             )}
             {currentMessages.length === 0 ? (
-              <div className="empty-state">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <h3>Ready to Compare AI Models</h3>
-                <p>Select your preferred models above and type a question below to see how different AI models respond.</p>
-              </div>
+              <FirstChatSection
+                userName={user?.name || 'Guest'}
+                prompt={prompt}
+                setPrompt={setPrompt}
+                handleTextareaInput={handleTextareaInput}
+                handleKeyDown={handleKeyDown}
+                onSend={sendRequest}
+                textareaRef={textareaRef}
+              />
             ) : (
               currentMessages.map((turn, turnIdx) => (
                 <div key={turnIdx} className="chat-turn">
@@ -1140,33 +1004,32 @@ function ChatContent() {
           </div>
         </main>
 
-        <div className="input-area">
-          {participants.length > 0 && typingUsers.length > 0 && (
-            <div className="typing-status text-xs text-gray-400 ml-4 mb-2 animate-pulse font-medium">
-              {typingUsers.length === 1
-                ? `${typingUsers[0].name} is typing...`
-                : typingUsers.length === 2
-                  ? `${typingUsers[0].name} and ${typingUsers[1].name} are typing...`
-                  : `${typingUsers.length} people are typing...`}
+        {currentMessages.length > 0 && (
+          <div className="input-area">
+            {participants.length > 0 && typingUsers.length > 0 && (
+              <div className="typing-status text-xs text-gray-400 ml-4 mb-2 animate-pulse font-medium">
+                {typingUsers.length === 1
+                  ? `${typingUsers[0].name} is typing...`
+                  : typingUsers.length === 2
+                    ? `${typingUsers[0].name} and ${typingUsers[1].name} are typing...`
+                    : `${typingUsers.length} people are typing...`}
+              </div>
+            )}
+            <div className="input-container">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                placeholder="Ask anything..."
+                value={prompt}
+                onChange={handleTextareaInput}
+                onKeyDown={handleKeyDown}
+              />
+              <button className="send-btn" onClick={sendRequest} disabled={isGenerating && false}>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>              </button>
             </div>
-          )}
-          <div className="input-container">
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              placeholder="Ask anything..."
-              value={prompt}
-              onChange={handleTextareaInput}
-              onKeyDown={handleKeyDown}
-            />
-            <button className="send-btn" onClick={sendRequest} disabled={isGenerating && false}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
+            <p className="footer-text">Powered by Multi-Model Inference</p>
           </div>
-          <p className="footer-text">Powered by Multi-Model Inference</p>
-        </div>
+        )}
       </div>
 
       {/* Toast */}
