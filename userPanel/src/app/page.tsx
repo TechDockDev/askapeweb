@@ -65,6 +65,7 @@ function ChatContent() {
   const [typingUsers, setTypingUsers] = useState<{ id: string, name: string }[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
   const initialLoadDone = useRef(false);
 
   // Refs
@@ -273,7 +274,9 @@ function ChatContent() {
         } else {
           setCurrentMessages([]);
           setHasMoreHistory(false);
+          setHasMoreHistory(false);
         }
+        setIsLoadingChat(false);
         setIsLoadingMore(false);
       });
 
@@ -764,10 +767,11 @@ function ChatContent() {
   // };
 
   // Helper to load a past chat
-  
+
   const loadChat = (chatId: string) => {
     setCurrentChatId(chatId);
     setCurrentMessages([]);
+    setIsLoadingChat(true);
 
     const userId = user?.id;
     const guestId = localStorage.getItem('askape_guest_id') || undefined;
@@ -815,7 +819,7 @@ function ChatContent() {
                   )} */}
                   <span className="text-black font-bold">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
                 </div>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-chevron-down-icon lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-chevron-down-icon lucide-chevron-down"><path d="m6 9 6 6 6-6" /></svg>
               </button>
 
               {isModelDropdownOpen && (
@@ -907,7 +911,15 @@ function ChatContent() {
                 <span className="text-xs text-gray-500">Loading history...</span>
               </div>
             )}
-            {currentMessages.length === 0 ? (
+            {isLoadingChat ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <svg className="animate-spin h-8 w-8 mb-4 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="#51ff00ff" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="#DFFF00" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p className="text-sm font-medium">Loading conversation...</p>
+              </div>
+            ) : currentMessages.length === 0 ? (
               <FirstChatSection
                 userName={user?.name || 'Guest'}
                 prompt={prompt}
@@ -1025,7 +1037,7 @@ function ChatContent() {
                 onKeyDown={handleKeyDown}
               />
               <button className="send-btn" onClick={sendRequest} disabled={isGenerating && false}>
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>              </button>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" /><path d="m21.854 2.147-10.94 10.939" /></svg>              </button>
             </div>
             <p className="footer-text">Powered by Multi-Model Inference</p>
           </div>

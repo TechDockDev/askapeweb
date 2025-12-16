@@ -38,8 +38,7 @@
     --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
-/* Scoped to avoid global pollution */
-.login-wrapper {
+body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-hover) 100%);
     color: var(--text-primary);
@@ -48,8 +47,8 @@
     align-items: center;
     justify-content: center;
     padding: 2rem;
+    transition: all 0.3s ease;
     position: relative;
-    width: 100%;
 }
 
 .theme-toggle {

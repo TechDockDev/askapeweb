@@ -29,9 +29,9 @@ export default function AddMembersModal({ isOpen, onClose, sessionId, onMemberAd
             {/* Glass Container */}
             <div className="relative w-full max-w-md mx-4">
                 {/* Background Blobs for Glass Effect */}
-                <div className="absolute -top-20 -left-20 w-60 h-60 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-                <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-                <div className="absolute top-20 right-20 w-60 h-60 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+                <div className="absolute -top-20 -left-20 w-60 h-60 bg-[#DFFF00] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+                <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-lime-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+                <div className="absolute top-20 right-20 w-60 h-60 bg-black/70 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
 
                 <div className="relative bg-white/10 dark:bg-black/80 backdrop-blur-5xl border border-white/20 dark:border-white/10 rounded-2xl !p-6 shadow-2xl overflow-hidden ring-1 ring-black/5">
 
@@ -46,7 +46,7 @@ export default function AddMembersModal({ isOpen, onClose, sessionId, onMemberAd
 
                     <div className="flex flex-col items-center mb-8 relative z-10">
                         <div className="w-16 h-16 bg-gradient-to-br from-white/10 to-white/5 rounded-2xl flex items-center justify-center !mb-3 text-white shadow-lg backdrop-blur-md border border-white/20">
-                            <svg width="32" height="32" fill="none" stroke="#9A58F7" viewBox="0 0 24 24">
+                            <svg width="32" height="32" fill="none" stroke="#DFFF00" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                             </svg>
                         </div>
