@@ -135,8 +135,8 @@ body {
 }
 
 .logo-icon svg {
-    width: 28px;
-    height: 28px;
+    width: 15px;
+    height: 15px;
     fill: white;
 }
 
@@ -159,12 +159,13 @@ body {
 }
 
 .logo-text {
-    font-size: 2rem;
-    font-weight: 700;
-    background: var(--gradient);
-    -webkit-background-clip: text;
+    /* font-size: 2rem;
+    font-weight: 700; */
+    /* background: var(--gradient); */
+    color: white;
+    /* -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-clip: text;
+    background-clip: text; */
 }
 
 .auth-title {
