@@ -56,8 +56,8 @@ function LoginContent() {
     };
 
     return (
-        <>
-            <div className="theme-toggle">
+        <div className="login-wrapper">
+            {/* <div className="theme-toggle">
                 <button className="theme-btn" onClick={toggleTheme} title="Toggle theme">
                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         {theme === 'dark' ? (
@@ -67,7 +67,7 @@ function LoginContent() {
                         )}
                     </svg>
                 </button>
-            </div>
+            </div> */}
 
             <div className="auth-container">
                 <a href="/" className="back-link">
@@ -86,7 +86,7 @@ function LoginContent() {
                                 <path d="M5 16L5.5 17.5L7 18L5.5 18.5L5 20L4.5 18.5L3 18L4.5 17.5L5 16Z" opacity="0.7" />
                             </svg>
                         </div>
-                        <span className="logo-text">AskApe</span>
+                        <span className="text-black text-2xl font-bold">AskApe</span>
                     </div>
 
                     <h1 className="auth-title">Welcome</h1>
@@ -125,7 +125,7 @@ function LoginContent() {
                     </p>
                 </div>
             </div>
-        </>
+        </div>
     );
 }
 

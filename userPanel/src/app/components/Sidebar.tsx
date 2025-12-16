@@ -107,7 +107,7 @@ export default function Sidebar({
                         <p>New Chat</p>
                     </button>
                 ) : (
-                    <div className="mx-4 mt-6 px-4 py-3 text-center text-sm text-gray-400 bg-white/5 rounded-lg mb-2.5">
+                    <div className="!mx-4 !mt-6 !px-4 !py-3 text-center text-sm text-gray-400 bg-white/5 rounded-lg mb-2.5">
                         Login to save history
                     </div>
                 )}
