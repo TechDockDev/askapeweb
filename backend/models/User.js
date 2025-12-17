@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema({
     plan: { type: String, default: 'free', enum: ['free', 'pro', 'pro_plus', 'enterprise'] },
     planExpiry: Date,
     apiKey: String,
+    tokenBalance: { type: Number, default: 2000 },
     tokens: [String],
     totalTokensUsed: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now },
