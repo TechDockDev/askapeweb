@@ -227,3 +227,16 @@ export const login = async (req, res) => {
         res.status(500).json({ success: false, error: 'Login failed' });
     }
 };
+
+export const getMe = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password -apiKey');
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+        res.json({ success: true, user });
+    } catch (error) {
+        console.error('Get Me error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch user profile' });
+    }
+};
