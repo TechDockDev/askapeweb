@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const planSchema = new mongoose.Schema({
     name: { type: String, required: true, unique: true },
     slug: { type: String, required: true, unique: true }, // e.g., 'free', 'pro'
+    razorpayPlanId: { type: String }, // e.g., 'plan_G0tF6...'
     price: { type: Number, required: true },
     period: { type: String, enum: ['monthly', 'yearly'], default: 'monthly' },
     features: [String],
