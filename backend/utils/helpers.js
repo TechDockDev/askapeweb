@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 
-let useDatabase = false;
+let useDatabase = true;
 const JWT_SECRET = process.env.JWT_SECRET || 'askape_secure_secret_key_2024';
 
 // We need to know if DB is used to update tokens correctly
@@ -46,7 +46,7 @@ export async function updateUserTokenUsage(userId, guestId, tokensUsed) {
         if (useDatabase) {
             if (userId) {
                 await User.findByIdAndUpdate(userId, {
-                    $inc: { totalTokensUsed: tokensUsed },
+                    $inc: { totalTokensUsed: tokensUsed, tokenBalance: -tokensUsed },
                     updatedAt: new Date()
                 });
             } else if (guestId) {

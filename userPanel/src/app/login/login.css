@@ -163,15 +163,7 @@
     }
 }
 
-.logo-text {
-    /* font-size: 2rem;
-    font-weight: 700; */
-    /* background: var(--gradient); */
-    color: black;
-    /* -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text; */
-}
+
 
 .auth-title {
     text-align: center;
@@ -366,9 +358,5 @@
 @media (max-width: 480px) {
     .auth-card {
         padding: 2rem 1.5rem;
-    }
-
-    .logo-text {
-        font-size: 1.75rem;
     }
 }
