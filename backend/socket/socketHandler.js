@@ -340,6 +340,15 @@ export default function socketHandler(io) {
 
             console.log(`🤖 Processing message for models: ${selectedModels.join(', ')}`);
 
+            // Check Token Balance
+            if (useDatabase && effectiveUserId) {
+                const user = await User.findById(effectiveUserId);
+                if (user && user.tokenBalance <= 0) {
+                    socket.emit('error', { message: 'Token limit reached. Please upgrade your plan.' });
+                    return;
+                }
+            }
+
             const promptTokens = estimateTokens(message);
 
             try {
