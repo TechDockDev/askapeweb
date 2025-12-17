@@ -17,6 +17,7 @@ import authRoutes from './routes/authRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 import socketHandler from './socket/socketHandler.js';
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -50,7 +51,12 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 app.use(cors('*'));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+    limit: '10mb',
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize Database
@@ -62,21 +68,13 @@ connectDB(MONGODB_URI).then((connected) => {
     // Inject storage for middleware
     setAuthUserStorage(userStorage);
 
-    // Fix for double api prefix (redirect /api/api/... to /api/...)
-    // app.use((req, res, next) => {
-    //     if (req.url.startsWith('/api/api/')) {
-    //         const newPath = req.url.replace('/api/api/', '/api/');
-    //         return res.redirect(307, newPath);
-    //     }
-    //     next();
-    // });
-
     // Routes
     app.use('/api/auth', authRoutes);
     // app.use('/auth', authRoutes);
     app.use('/api/chat', chatRoutes);
     app.use('/api', userRoutes);
     app.use('/api/admin', adminRoutes);
+    app.use('/api/payments', paymentRoutes);
 
     // Legacy Routes with Redirects
     app.get('/api/sessions', (req, res) => {

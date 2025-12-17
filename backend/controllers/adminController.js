@@ -3,6 +3,7 @@ import Plan from '../models/Plan.js';
 import Payment from '../models/Payment.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import razorpay from '../config/razorpay.js';
 
 export const adminLogin = async (req, res) => {
     try {
@@ -39,7 +40,7 @@ export const adminLogin = async (req, res) => {
 
 export const getDashboardStats = async (req, res) => {
     try {
-        const totalUsers = await User.countDocuments();
+        const totalUsers = await User.countDocuments({ isGuest: false });
         const totalPlans = await Plan.countDocuments();
 
         // Calculate monthly growth (users created in the last 6 months)
@@ -76,11 +77,54 @@ export const getDashboardStats = async (req, res) => {
 
 export const createPlan = async (req, res) => {
     try {
-        const newPlan = new Plan(req.body);
+        let { razorpayPlanId, slug, name, price, period, description } = req.body;
+
+        const existingPlan = await Plan.findOne({ slug });
+        if (existingPlan) {
+            return res.status(400).json({ message: 'Plan with this slug already exists' });
+        }
+
+        // Auto-create in Razorpay if ID not provided AND price > 0
+        if (price > 0 && !razorpayPlanId && razorpay) {
+            try {
+                const rzpPlan = await razorpay.plans.create({
+                    period: period === 'yearly' ? 'yearly' : 'monthly',
+                    interval: 1,
+                    item: {
+                        name: name,
+                        amount: price * 100, // Amount in paise
+                        currency: "INR",
+                        description: description || `${name} Subscription`
+                    }
+                });
+                razorpayPlanId = rzpPlan.id;
+                console.log(`✅ Created Razorpay Plan: ${razorpayPlanId}`);
+            } catch (rzpError) {
+                console.error("Razorpay Plan Creation Failed:", rzpError);
+                return res.status(500).json({ message: 'Failed to create plan in Razorpay', error: rzpError.message });
+            }
+        }
+
+        // Final check if we still don't have an ID for PAID plans
+        if (price > 0 && !razorpayPlanId) {
+            return res.status(400).json({ message: 'razorpayPlanId is required for paid plans' });
+        }
+
+        const newPlan = new Plan({ ...req.body, razorpayPlanId });
         await newPlan.save();
         res.status(201).json(newPlan);
     } catch (err) {
         res.status(500).json({ message: 'Failed to create plan', error: err.message });
+    }
+};
+
+export const updatePlan = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updatedPlan = await Plan.findByIdAndUpdate(id, req.body, { new: true });
+        res.json(updatedPlan);
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to update plan' });
     }
 };
 
@@ -97,7 +141,7 @@ export const getUsers = async (req, res) => {
     try {
         // Fetch users with their plan details (if we referenced Plan in User, but currently User has basic plan string)
         // We can just return users list
-        const users = await User.find().select('-password').sort({ createdAt: -1 }).limit(100);
+        const users = await User.find({ isGuest: false }).select('-password').sort({ createdAt: -1 }).limit(100);
         res.json(users);
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch users' });
