@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
 import Login from './pages/Login';
@@ -6,12 +7,14 @@ import Plans from './pages/Plans';
 import Users from './pages/Users';
 
 function App() {
-  const isAuthenticated = !!localStorage.getItem('adminToken');
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    !!localStorage.getItem('adminToken')
+  );
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login setIsAuthenticated={setIsAuthenticated} />} />
 
         <Route path="/" element={
           isAuthenticated ?

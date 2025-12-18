@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 
-export default function Login() {
+export default function Login({ setIsAuthenticated }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -15,6 +15,7 @@ export default function Login() {
             const res = await axios.post(`${API_BASE_URL}/admin/login`, { email, password });
             localStorage.setItem('adminToken', res.data.token);
             localStorage.setItem('adminUser', JSON.stringify(res.data.user));
+            setIsAuthenticated(true);   // 🔥 THIS triggers rerender
             navigate('/dashboard');
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed');
