@@ -33,7 +33,7 @@ export default function Login() {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-brand"
                             required
                         />
                     </div>
@@ -43,13 +43,13 @@ export default function Login() {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-brand"
                             required
                         />
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700 transition"
+                        className="w-full bg-brand text-black py-2 rounded hover:bg-brand/80 transition font-bold"
                     >
                         Login
                     </button>

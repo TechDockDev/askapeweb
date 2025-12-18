@@ -67,26 +67,15 @@ export default function Sidebar({
             <aside
                 className={`fixed top-0 left-0 z-[100] h-screen w-[250px] bg-black shadow-md transition-transform duration-300 flex flex-col md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
             >
-                <div className="!pt-5 !px-5 flex items-center gap-3 !mb-2">
-                    <div className="logo-icon">
-                        <svg viewBox="0 0 24 24" fill="white" className="sparkle-icon">
-                            <path d="M12 1L13.5 8.5L21 10L13.5 11.5L12 19L10.5 11.5L3 10L10.5 8.5L12 1Z" />
-                            <path
-                                d="M19 2L19.75 4.25L22 5L19.75 5.75L19 8L18.25 5.75L16 5L18.25 4.25L19 2Z"
-                                opacity="0.7"
-                            />
-                            <path
-                                d="M5 16L5.5 17.5L7 18L5.5 18.5L5 20L4.5 18.5L3 18L4.5 17.5L5 16Z"
-                                opacity="0.7"
-                            />
-                        </svg>
-                    </div>
-                    <span className="text-xl font-bold text-white">AskApe</span>
+                <div className="w-full flex justify-center items-center !mb-2">
+                    {/* <div className="flex items-center justify-center"> */}
+                        <img src="/logo.png" alt="AskApe Logo" className="w-24 h-24 object-contain" />
+                    {/* </div> */}
                 </div>
 
                 {user ? (
                     <button
-                        className="!pt-3.5 !pb-2 !-ml-24 text-white font-semibold text-sm flex items-center justify-center gap-2"
+                        className="!pt-0 !pb-2 !-ml-24 text-white font-semibold text-sm flex items-center justify-center gap-2"
                         onClick={onStartNewChat}
                     >
                         <svg

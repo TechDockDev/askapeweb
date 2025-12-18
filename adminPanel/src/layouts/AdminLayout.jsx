@@ -1,26 +1,32 @@
+import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Users, CreditCard, LogOut } from 'lucide-react';
 
 export default function AdminLayout() {
     const navigate = useNavigate();
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-    const handleLogout = () => {
+    const handleLogoutClick = () => {
+        setShowLogoutModal(true);
+    };
+
+    const confirmLogout = () => {
         localStorage.removeItem('adminToken');
         navigate('/login');
     };
 
     return (
-        <div className="flex h-screen bg-gray-100">
+        <div className="flex h-screen bg-main relative">
             {/* Sidebar */}
-            <aside className="w-64 bg-white shadow-md">
+            <aside className="w-64 bg-black shadow-md border-r border-gray-800">
                 <div className="p-6">
-                    <h1 className="text-2xl font-bold text-indigo-600">AdminPanel</h1>
+                    <h1 className="text-2xl font-bold text-white">AskApe Admin</h1>
                 </div>
-                <nav className="mt-6">
+                <nav className="mt-2 flex flex-col gap-2">
                     <NavLink
                         to="/dashboard"
                         className={({ isActive }) =>
-                            `flex items-center px-6 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 ${isActive ? 'bg-indigo-50 text-indigo-600 border-r-4 border-indigo-600' : ''
+                            `flex items-center px-6 py-3 rounded-xl mx-2 text-white hover:bg-gray-800 hover:text-brand ${isActive ? 'bg-gray-800' : ''
                             }`
                         }
                     >
@@ -30,7 +36,7 @@ export default function AdminLayout() {
                     <NavLink
                         to="/users"
                         className={({ isActive }) =>
-                            `flex items-center px-6 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 ${isActive ? 'bg-indigo-50 text-indigo-600 border-r-4 border-indigo-600' : ''
+                            `flex items-center px-6 py-3 rounded-xl mx-2 text-white hover:bg-gray-800 hover:text-brand ${isActive ? 'bg-gray-800' : ''
                             }`
                         }
                     >
@@ -40,7 +46,7 @@ export default function AdminLayout() {
                     <NavLink
                         to="/plans"
                         className={({ isActive }) =>
-                            `flex items-center px-6 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 ${isActive ? 'bg-indigo-50 text-indigo-600 border-r-4 border-indigo-600' : ''
+                            `flex items-center px-6 py-3 rounded-xl mx-2 text-white hover:bg-gray-800 hover:text-brand ${isActive ? 'bg-gray-800' : ''
                             }`
                         }
                     >
@@ -48,9 +54,9 @@ export default function AdminLayout() {
                         Membership Plans
                     </NavLink>
                 </nav>
-                <div className="absolute bottom-0 w-64 p-6 border-t">
+                <div className="absolute bottom-0 w-64 p-6 border-t border-gray-800">
                     <button
-                        onClick={handleLogout}
+                        onClick={handleLogoutClick}
                         className="flex items-center text-red-500 hover:text-red-700 w-full"
                     >
                         <LogOut size={20} className="mr-3" />
@@ -63,6 +69,30 @@ export default function AdminLayout() {
             <main className="flex-1 overflow-y-auto p-8">
                 <Outlet />
             </main>
+
+            {/* Logout Modal */}
+            {showLogoutModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-xl w-96 transform transition-all scale-100">
+                        <h3 className="text-xl font-bold mb-4 text-gray-800">Confirm Logout</h3>
+                        <p className="text-gray-600 mb-6">Are you sure you want to log out?</p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowLogoutModal(false)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmLogout}
+                                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-medium transition"
+                            >
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
