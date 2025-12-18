@@ -15,12 +15,16 @@ export const adminLogin = async (req, res) => {
         // TEMP: Allow a hardcoded admin for bootstrap if user doesn't exist? 
         // Better: Check regular user login but verify role='admin'
 
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).select('+password');
         if (!user) return res.status(404).json({ message: 'Admin not found' });
 
         // Basic password check (assuming using same hashing as users)
         // If google auth is used, they might need a specific admin password set separately
         // For now, let's assume standard auth flow
+        if (!user.password) {
+            return res.status(400).json({ message: 'Invalid credentials' });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
@@ -41,6 +45,7 @@ export const adminLogin = async (req, res) => {
 export const getDashboardStats = async (req, res) => {
     try {
         const totalUsers = await User.countDocuments({ isGuest: false });
+        const totalGuests = await User.countDocuments({ isGuest: true });
         const totalPlans = await Plan.countDocuments();
 
         // Calculate monthly growth (users created in the last 6 months)
@@ -54,7 +59,8 @@ export const getDashboardStats = async (req, res) => {
             const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
             const count = await User.countDocuments({
-                createdAt: { $gte: firstDay, $lte: lastDay }
+                createdAt: { $gte: firstDay, $lte: lastDay },
+                isGuest: false
             });
 
             monthlyGrowth.push({
@@ -63,9 +69,22 @@ export const getDashboardStats = async (req, res) => {
             });
         }
 
+        const totalRevenueResult = await Payment.aggregate([
+            { $match: { status: 'completed' } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+
+        // Assuming amount is stored in the smallest currency unit (e.g. cents/paise)
+        // Adjust if needed based on how you store data.
+        // For now, let's assume it's stored as the display value OR handled by frontend.
+        // Actually, safer to return as is.
+        const totalRevenue = totalRevenueResult.length > 0 ? totalRevenueResult[0].total : 0;
+
         res.json({
             totalUsers,
+            totalGuests,
             totalPlans,
+            totalRevenue,
             monthlyGrowth: monthlyGrowth.reverse()
         });
 
@@ -128,6 +147,16 @@ export const updatePlan = async (req, res) => {
     }
 };
 
+export const deletePlan = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await Plan.findByIdAndDelete(id);
+        res.json({ message: 'Plan deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to delete plan' });
+    }
+};
+
 export const getPlans = async (req, res) => {
     try {
         const plans = await Plan.find();
@@ -139,10 +168,33 @@ export const getPlans = async (req, res) => {
 
 export const getUsers = async (req, res) => {
     try {
-        // Fetch users with their plan details (if we referenced Plan in User, but currently User has basic plan string)
-        // We can just return users list
-        const users = await User.find({ isGuest: false }).select('-password').sort({ createdAt: -1 }).limit(100);
-        res.json(users);
+        const { search, plan, page = 1, limit = 10 } = req.query;
+        let query = { isGuest: false };
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (plan && plan !== 'all') {
+            query.plan = plan;
+        }
+
+        const count = await User.countDocuments(query);
+        const users = await User.find(query)
+            .select('-password')
+            .sort({ createdAt: -1 })
+            .limit(limit * 1)
+            .skip((page - 1) * limit);
+
+        res.json({
+            users,
+            totalPages: Math.ceil(count / limit),
+            currentPage: Number(page),
+            totalUsers: count
+        });
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch users' });
     }
