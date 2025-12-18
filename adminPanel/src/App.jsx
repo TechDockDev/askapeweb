@@ -14,10 +14,10 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route path="/" element={
-          // isAuthenticated ? 
-          <AdminLayout /> 
-          // :
-          //  <Navigate to="/login" />}
+          isAuthenticated ?
+            <AdminLayout />
+            :
+            <Navigate to="/login" />
         }>
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />
