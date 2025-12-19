@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Plans from './pages/Plans';
 import Users from './pages/Users';
+import UserDetails from './pages/UserDetails';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
@@ -25,6 +26,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="users" element={<Users />} />
+          <Route path="users/:id" element={<UserDetails />} />
           <Route path="plans" element={<Plans />} />
         </Route>
       </Routes>
