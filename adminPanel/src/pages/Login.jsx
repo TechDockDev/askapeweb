@@ -25,6 +25,9 @@ export default function Login({ setIsAuthenticated }) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-100">
             <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+                <div className="flex justify-center mb-6">
+                    <img src="/logo.png" alt="AskApe Logo" className="w-32 h-32 object-contain" />
+                </div>
                 <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Admin Login</h2>
                 {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
                 <form onSubmit={handleLogin}>

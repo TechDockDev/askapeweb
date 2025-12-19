@@ -19,7 +19,8 @@ export default function AdminLayout() {
         <div className="flex h-screen bg-main relative">
             {/* Sidebar */}
             <aside className="w-64 bg-black shadow-md border-r border-gray-800">
-                <div className="p-6">
+                <div className="p-6 flex items-center gap-3">
+                    <img src="/logo.png" alt="AskApe Logo" className="w-14 h-14 object-contain" />
                     <h1 className="text-2xl font-bold text-white">AskApe Admin</h1>
                 </div>
                 <nav className="mt-2 flex flex-col gap-2">
