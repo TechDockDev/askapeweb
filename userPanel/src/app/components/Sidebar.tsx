@@ -67,9 +67,10 @@ export default function Sidebar({
             <aside
                 className={`fixed top-0 left-0 z-[100] h-screen w-[250px] bg-black shadow-md transition-transform duration-300 flex flex-col md:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
             >
-                <div className="w-full flex justify-center items-center !mb-2">
+                <div className="w-full flex justify-start items-center !mb-2">
                     {/* <div className="flex items-center justify-center"> */}
                         <img src="/logo.png" alt="AskApe Logo" className="w-24 h-24 object-contain" />
+                        <p className="text-white font-semibold text-2xl">AskApe</p>
                     {/* </div> */}
                 </div>
 
