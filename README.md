@@ -1,4 +1,4 @@
-# AskApe In-Depth Documentation
+# AskApe Documentation
 
 ## 1. Project Overview
 AskApe is a scalable, real-time AI chat platform built with the MERN stack (MongoDB, Express, React/Next.js, Node.js). It orchestrates interaction with multiple LLMs simultaneously, supports collaborative sessions, and manages subscriptions via Razorpay.
