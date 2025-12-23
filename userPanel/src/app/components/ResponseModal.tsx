@@ -40,7 +40,7 @@ export default function ResponseModal({ isOpen, onClose, content, modelName, que
                         {/* Question Section */}
                         <div className="mb-6 pb-6 border-b border-gray-100">
                             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Question</h3>
-                            <p className="text-gray-800 font-medium text-lg">{question}</p>
+                            <p className="text-gray-800 font-medium text-lg line-clamp-2">{question}</p>
                         </div>
 
                         {/* Response Section */}

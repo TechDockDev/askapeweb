@@ -344,7 +344,7 @@ export default function socketHandler(io) {
             if (useDatabase && effectiveUserId) {
                 const user = await User.findById(effectiveUserId);
                 if (user && user.tokenBalance <= 0) {
-                    socket.emit('error', { message: 'Token limit reached. Please upgrade your plan.' });
+                    socket.emit('error', { message: 'Current plan token limit reached. Please upgrade your plan.' });
                     return;
                 }
             }
