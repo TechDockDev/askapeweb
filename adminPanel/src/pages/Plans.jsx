@@ -136,7 +136,7 @@ export default function Plans() {
                         </div>
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{plan.name}</h3>
                         <div className="text-3xl font-bold text-black mb-4">
-                            ${plan.price}<span className="text-lg text-gray-400 font-normal">/{plan.period === 'monthly' ? 'mo' : 'yr'}</span>
+                            ₹{plan.price}<span className="text-lg text-gray-400 font-normal">/{plan.period === 'monthly' ? 'mo' : 'yr'}</span>
                         </div>
 
                         <div className="flex-1">
@@ -203,7 +203,7 @@ export default function Plans() {
 
                             <div className="grid grid-cols-2 gap-5">
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Price ($)</label>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Price (₹)</label>
                                     <input
                                         type="number"
                                         className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-900 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all"

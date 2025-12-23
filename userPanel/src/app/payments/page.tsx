@@ -199,7 +199,7 @@ export default function PaymentsPage() {
                                 )}
                                 <h3 className="text-xl font-bold !mb-2">{plan.name}</h3>
                                 <div className="flex items-baseline gap-1 !mb-6">
-                                    <span className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00C950] to-[#00C950]">${plan.price}</span>
+                                    <span className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00C950] to-[#00C950]">₹{plan.price}</span>
                                     <span className="text-gray-800  text-sm">/{plan.period || 'month'}</span>
                                 </div>
                                 <ul className="space-y-3 !mb-8">

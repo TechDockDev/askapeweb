@@ -14,7 +14,6 @@
     --text-primary: #1a1a2e;
     --text-secondary: #64748b;
     --accent: #7c3aed;
-    --accent-light: #8b5cf6;
     --accent-glow: rgba(124, 58, 237, 0.2);
     --secondary: #06b6d4;
     --secondary-light: #22d3ee;
@@ -527,7 +526,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgb(0, 0, 0);
+    background: rgba(0, 0, 0, 0.5);
     z-index: 90;
     backdrop-filter: blur(2px);
     opacity: 0;
