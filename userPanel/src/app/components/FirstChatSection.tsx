@@ -128,6 +128,12 @@ export default function FirstChatSection({
                     }}
                 />
             </div>
+
+            <div className="!mt-8 text-center">
+                <p className="text-sm font-medium text-gray-400">
+                    Powered by RRP Engine
+                </p>
+            </div>
         </div>
     );
 }
