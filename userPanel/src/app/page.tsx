@@ -12,6 +12,8 @@ import AddMembersModal from './components/AddMembersModal';
 import LogoutModal from './components/LogoutModal';
 import Sidebar from './components/Sidebar';
 import FirstChatSection from './components/FirstChatSection';
+import ResponseModal from './components/ResponseModal';
+
 
 interface ChatMessage {
   id?: string;
@@ -66,7 +68,9 @@ function ChatContent() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const [selectedResponse, setSelectedResponse] = useState<{ content: string, modelName: string, question: string } | null>(null);
   const initialLoadDone = useRef(false);
+
 
   // Refs
   const chatDisplayRef = useRef<HTMLDivElement>(null);
@@ -979,19 +983,33 @@ function ChatContent() {
                   )}
                   <div className="response-grid">
                     {turn.responses.map((resp, respIdx) => (
-                      <div key={respIdx} className="response-card">
+                      <div
+                        key={respIdx}
+                        className="response-card cursor-pointer hover:ring-2 hover:ring-indigo-500/20 transition-all"
+                        onClick={() => setSelectedResponse({ content: resp.content, modelName: resp.modelName, question: turn.prompt })}
+                      >
                         <div className="card-header">
+
                           <div className="card-title">
                             <span className={`status-dot ${resp.isComplete ? 'done' : resp.content ? 'active' : ''}`}></span>
                             <span>{resp.modelName}</span>
                           </div>
-                          <button className="copy-btn" onClick={() => copyText(resp.content)}>
+                          <button
+                            className="copy-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyText(resp.content);
+                            }}
+                          >
+
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                             Copy
                           </button>
                         </div>
+                        {/* Stop propagation for copy button */}
+
                         <div className="card-content">
                           {resp.content ? (
                             <div className="markdown-content">
@@ -1076,7 +1094,16 @@ function ChatContent() {
         onClose={() => setIsLogoutModalOpen(false)}
         onLogout={handleLogout}
       />
+      <ResponseModal
+        isOpen={!!selectedResponse}
+        onClose={() => setSelectedResponse(null)}
+        content={selectedResponse?.content || ''}
+        modelName={selectedResponse?.modelName || ''}
+        question={selectedResponse?.question || ''}
+      />
+
     </>
+
   );
 }
 
