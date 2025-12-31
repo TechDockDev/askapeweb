@@ -1,5 +1,7 @@
-const HF_TOKEN = process.env.HF_ACCESS_TOKEN;
+import https from 'node:https';
 import dns from 'node:dns';
+
+const HF_TOKEN = process.env.HF_ACCESS_TOKEN;
 
 // Helper to resolve domain bypassing system resolver if needed
 async function resolveDomain(domain) {
@@ -16,120 +18,160 @@ async function resolveDomain(domain) {
     return domain; // Fallpaack to domain if resolve fails or no address
 }
 
+// Promisified HTTPS request helper
+function httpsRequest(options, body) {
+    return new Promise((resolve, reject) => {
+        const req = https.request(options, (res) => {
+            resolve(res);
+        });
+        req.on('error', (err) => {
+            reject(err);
+        });
+        if (body) {
+            req.write(body);
+        }
+        req.end();
+    });
+}
+
 export async function queryHuggingFaceChat(model, messages, options = {}) {
     const domain = 'router.huggingface.co';
     const ip = await resolveDomain(domain);
-    const API_URL = `https://${ip}/v1/chat/completions`;
+    const path = '/v1/chat/completions';
 
     const { maxTokens = 4000, temperature = 0.7 } = options;
 
-    // Ensure messages is an array of {role, content}
     const chatMessages = Array.isArray(messages)
         ? messages
         : [{ role: 'user', content: messages }];
 
-    let response;
-    try {
-        response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${HF_TOKEN}`,
-                'Content-Type': 'application/json',
-                'Host': domain // Required when using IP in URL
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: chatMessages,
-                max_tokens: maxTokens,
-                temperature: temperature,
-                stream: false
-            })
-        });
-    } catch (e) {
-        console.error('Fetch failed details:', e);
-        throw new Error(`Fetch failed: ${e.message}${e.cause ? ' - ' + e.cause : ''}`);
-    }
+    const body = JSON.stringify({
+        model: model,
+        messages: chatMessages,
+        max_tokens: maxTokens,
+        temperature: temperature,
+        stream: false
+    });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API Error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return {
-        content: data.choices[0]?.message?.content || '',
-        usage: data.usage || {}
+    const reqOptions = {
+        hostname: ip,
+        port: 443,
+        path: path,
+        method: 'POST',
+        servername: domain, // Critical: Sets SNI for SSL handshake
+        headers: {
+            'Authorization': `Bearer ${HF_TOKEN}`,
+            'Content-Type': 'application/json',
+            'Host': domain // Required for HTTP routing
+        }
     };
+
+    try {
+        const res = await httpsRequest(reqOptions, body);
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+            let errorText = '';
+            res.on('data', chunk => errorText += chunk);
+            await new Promise(r => res.on('end', r));
+            throw new Error(`API Error: ${res.statusCode} - ${errorText}`);
+        }
+
+        let dataStr = '';
+        res.on('data', chunk => dataStr += chunk);
+        await new Promise(r => res.on('end', r));
+
+        const data = JSON.parse(dataStr);
+        return {
+            content: data.choices[0]?.message?.content || '',
+            usage: data.usage || {}
+        };
+
+    } catch (e) {
+        console.error('Request failed details:', e);
+        throw new Error(`Request failed: ${e.message}${e.cause ? ' - ' + e.cause : ''}`);
+    }
 }
 
 export async function queryHuggingFaceStream(model, messages, onChunk, options = {}) {
     const domain = 'router.huggingface.co';
     const ip = await resolveDomain(domain);
-    const API_URL = `https://${ip}/v1/chat/completions`;
+    const path = '/v1/chat/completions';
 
     const { maxTokens = 4000, temperature = 0.7 } = options;
 
-    // Ensure messages is an array of {role, content}
     const chatMessages = Array.isArray(messages)
         ? messages
         : [{ role: 'user', content: messages }];
 
-    let response;
-    try {
-        response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${HF_TOKEN}`,
-                'Content-Type': 'application/json',
-                'Host': domain
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: chatMessages,
-                max_tokens: maxTokens,
-                temperature: temperature,
-                stream: true
-            })
-        });
-    } catch (e) {
-        console.error('Fetch failed details:', e);
-        throw new Error(`Fetch failed: ${e.message}${e.cause ? ' - ' + e.cause : ''}`);
-    }
+    const body = JSON.stringify({
+        model: model,
+        messages: chatMessages,
+        max_tokens: maxTokens,
+        temperature: temperature,
+        stream: true
+    });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API Error: ${response.status} - ${errorText}`);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let fullResponse = '';
-
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-            if (line.startsWith('data:')) {
-                const dataStr = line.slice(5).trim();
-                if (dataStr === '[DONE]') continue;
-
-                try {
-                    const data = JSON.parse(dataStr);
-                    if (data.choices?.[0]?.delta?.content) {
-                        const chunk = data.choices[0].delta.content;
-                        fullResponse += chunk;
-                        onChunk(chunk, fullResponse);
-                    }
-                } catch (e) { /* skip */ }
-            }
+    const reqOptions = {
+        hostname: ip,
+        port: 443,
+        path: path,
+        method: 'POST',
+        servername: domain, // Critical: Sets SNI for SSL handshake
+        headers: {
+            'Authorization': `Bearer ${HF_TOKEN}`,
+            'Content-Type': 'application/json',
+            'Host': domain
         }
-    }
+    };
 
-    return fullResponse;
+    try {
+        const res = await httpsRequest(reqOptions, body);
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+            let errorText = '';
+            res.on('data', chunk => errorText += chunk);
+            await new Promise(r => res.on('end', r));
+            throw new Error(`API Error: ${res.statusCode} - ${errorText}`);
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullResponse = '';
+
+        return new Promise((resolve, reject) => {
+            res.on('data', (chunk) => {
+                buffer += decoder.decode(chunk, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data:')) {
+                        const dataStr = line.slice(5).trim();
+                        if (dataStr === '[DONE]') continue;
+
+                        try {
+                            const data = JSON.parse(dataStr);
+                            if (data.choices?.[0]?.delta?.content) {
+                                const chunkContent = data.choices[0].delta.content;
+                                fullResponse += chunkContent;
+                                onChunk(chunkContent, fullResponse);
+                            }
+                        } catch (e) { /* skip */ }
+                    }
+                }
+            });
+
+            res.on('end', () => {
+                resolve(fullResponse);
+            });
+
+            res.on('error', (err) => {
+                reject(err);
+            });
+        });
+
+    } catch (e) {
+        console.error('Request failed details:', e);
+        throw new Error(`Request failed: ${e.message}${e.cause ? ' - ' + e.cause : ''}`);
+    }
 }
