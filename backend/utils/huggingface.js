@@ -1,7 +1,26 @@
 const HF_TOKEN = process.env.HF_ACCESS_TOKEN;
+import dns from 'node:dns';
+
+// Helper to resolve domain bypassing system resolver if needed
+async function resolveDomain(domain) {
+    try {
+        // Try setting custom servers to bypass local issues
+        dns.setServers(['8.8.8.8', '1.1.1.1']);
+        const addresses = await dns.promises.resolve4(domain);
+        if (addresses && addresses.length > 0) {
+            return addresses[0];
+        }
+    } catch (e) {
+        console.warn('Custom DNS resolution failed, falling back to system:', e.message);
+    }
+    return domain; // Fallpaack to domain if resolve fails or no address
+}
 
 export async function queryHuggingFaceChat(model, messages, options = {}) {
-    const API_URL = 'https://router.huggingface.co/v1/chat/completions';
+    const domain = 'router.huggingface.co';
+    const ip = await resolveDomain(domain);
+    const API_URL = `https://${ip}/v1/chat/completions`;
+
     const { maxTokens = 4000, temperature = 0.7 } = options;
 
     // Ensure messages is an array of {role, content}
@@ -16,6 +35,7 @@ export async function queryHuggingFaceChat(model, messages, options = {}) {
             headers: {
                 'Authorization': `Bearer ${HF_TOKEN}`,
                 'Content-Type': 'application/json',
+                'Host': domain // Required when using IP in URL
             },
             body: JSON.stringify({
                 model: model,
@@ -43,7 +63,10 @@ export async function queryHuggingFaceChat(model, messages, options = {}) {
 }
 
 export async function queryHuggingFaceStream(model, messages, onChunk, options = {}) {
-    const API_URL = 'https://router.huggingface.co/v1/chat/completions';
+    const domain = 'router.huggingface.co';
+    const ip = await resolveDomain(domain);
+    const API_URL = `https://${ip}/v1/chat/completions`;
+
     const { maxTokens = 4000, temperature = 0.7 } = options;
 
     // Ensure messages is an array of {role, content}
@@ -58,6 +81,7 @@ export async function queryHuggingFaceStream(model, messages, onChunk, options =
             headers: {
                 'Authorization': `Bearer ${HF_TOKEN}`,
                 'Content-Type': 'application/json',
+                'Host': domain
             },
             body: JSON.stringify({
                 model: model,
