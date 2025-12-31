@@ -9,20 +9,26 @@ export async function queryHuggingFaceChat(model, messages, options = {}) {
         ? messages
         : [{ role: 'user', content: messages }];
 
-    const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${HF_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            model: model,
-            messages: chatMessages,
-            max_tokens: maxTokens,
-            temperature: temperature,
-            stream: false
-        })
-    });
+    let response;
+    try {
+        response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${HF_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: chatMessages,
+                max_tokens: maxTokens,
+                temperature: temperature,
+                stream: false
+            })
+        });
+    } catch (e) {
+        console.error('Fetch failed details:', e);
+        throw new Error(`Fetch failed: ${e.message}${e.cause ? ' - ' + e.cause : ''}`);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -45,20 +51,26 @@ export async function queryHuggingFaceStream(model, messages, onChunk, options =
         ? messages
         : [{ role: 'user', content: messages }];
 
-    const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${HF_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            model: model,
-            messages: chatMessages,
-            max_tokens: maxTokens,
-            temperature: temperature,
-            stream: true
-        })
-    });
+    let response;
+    try {
+        response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${HF_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: chatMessages,
+                max_tokens: maxTokens,
+                temperature: temperature,
+                stream: true
+            })
+        });
+    } catch (e) {
+        console.error('Fetch failed details:', e);
+        throw new Error(`Fetch failed: ${e.message}${e.cause ? ' - ' + e.cause : ''}`);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
