@@ -54,7 +54,7 @@ export const createSubscription = async (req, res) => {
         res.json({
             success: true,
             subscription_id: subscription.id,
-            key_id: process.env.RAZORPAY_KEMPTY_STRINGD
+            key_id: process.env.RAZORPAY_KEY_ID
         });
 
     } catch (error) {
