@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
     avatar: String,
     avatarUrl: String,
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    plan: { type: String, default: 'free', enum: ['free', 'pro', 'pro_plus', 'enterprise'] },
+    plan: { type: String, default: 'free'},
     planExpiry: Date,
     apiKey: String,
     tokenBalance: { type: Number, default: 2000 },
