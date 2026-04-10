@@ -12,6 +12,8 @@ import {
     updateUserTokenUsage
 } from '../utils/helpers.js';
 import { queryHuggingFaceStream } from '../utils/huggingface.js';
+import { runCouncilPipeline } from '../service/councilService.js';
+import { COUNCIL_CONFIG } from '../config/councilConfig.js';
 
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
@@ -567,6 +569,167 @@ export default function socketHandler(io) {
             }
 
             io.to(sessionId).emit('all_responses_complete', { sessionId, modelsCompleted: aiResponses.length });
+        });
+
+        // ─── Council Mode Handler ─────────────────────────────────
+        socket.on('council_message', async (data) => {
+            const { sessionId, message, modelIds = [], chairmanModel, userId, guestId } = data;
+
+            if (!sessionId || !message) {
+                socket.emit('error', { message: 'Session ID and message are required' });
+                return;
+            }
+
+            const effectiveUserId = userId || currentUserId;
+            const effectiveGuestId = guestId || currentGuestId || generateGuestId();
+            const messageId = crypto.randomUUID();
+            const selectedModels = modelIds.length > 0
+                ? modelIds
+                : AVAILABLE_MODELS.filter(m => m.isDefault).map(m => m.id);
+
+            // Enforce minimum council size
+            if (selectedModels.length < COUNCIL_CONFIG.minCouncilModels) {
+                socket.emit('error', { message: `Council mode requires at least ${COUNCIL_CONFIG.minCouncilModels} models.` });
+                return;
+            }
+
+            const effectiveChairman = chairmanModel || selectedModels[0];
+
+            console.log(`🏛️ Council mode: ${selectedModels.length} models, chairman: ${effectiveChairman}`);
+
+            // Save user message (reuse existing logic)
+            const promptTokens = estimateTokens(message);
+            try {
+                if (useDatabase) {
+                    await Chat.findOneAndUpdate(
+                        { messageId },
+                        {
+                            $setOnInsert: {
+                                sessionId,
+                                messageId,
+                                userId: effectiveUserId,
+                                role: 'USER',
+                                content: message,
+                                tokensUsed: promptTokens,
+                                createdAt: new Date()
+                            }
+                        },
+                        { upsert: true, new: true }
+                    );
+
+                    const msgCount = await Chat.countDocuments({ sessionId, role: 'USER' });
+                    const title = msgCount <= 1 ? `🏛️ ${message.substring(0, 45)}` : undefined;
+                    const updateOps = {
+                        $inc: { messageCount: 1 },
+                        $set: { updatedAt: new Date(), mode: 'council' }
+                    };
+                    if (title) updateOps.$set.title = title;
+
+                    await Session.findOneAndUpdate(
+                        { sessionId },
+                        {
+                            $setOnInsert: {
+                                sessionId,
+                                userId: effectiveUserId,
+                                isActive: true,
+                                totalTokensUsed: 0,
+                                createdAt: new Date()
+                            },
+                            ...updateOps
+                        },
+                        { upsert: true, new: true }
+                    );
+                } else {
+                    const session = sessionStorage.get(sessionId) || { sessionId, messages: [] };
+                    session.messages.push({ id: messageId, role: 'USER', content: message, aiResponses: [] });
+                    sessionStorage.set(sessionId, session);
+                }
+                socket.emit('message_saved', { id: messageId, stored: useDatabase ? 'mongodb' : 'memory' });
+            } catch (err) {
+                console.error('Council message save error:', err);
+            }
+
+            // Build conversation context
+            const conversationContext = await buildConversationContext(sessionId, message);
+
+            // Notify streaming started
+            io.to(sessionId).emit('streaming_started', {
+                sessionId,
+                messageId,
+                models: selectedModels.map(id => ({ id, name: id.split('/').pop() })),
+                mode: 'council'
+            });
+
+            // Run the council pipeline
+            try {
+                const result = await runCouncilPipeline(io, sessionId, message, selectedModels, effectiveChairman, conversationContext);
+
+                // Save AI response with council data
+                const aiResponseId = crypto.randomUUID();
+                const aiResponses = result.responses.map(r => ({
+                    modelId: r.modelId,
+                    content: r.content,
+                    tokensUsed: estimateTokens(r.content),
+                    createdAt: new Date()
+                }));
+
+                const totalAiTokens = aiResponses.reduce((sum, r) => sum + r.tokensUsed, 0) + estimateTokens(result.finalAnswer);
+
+                try {
+                    if (useDatabase && effectiveUserId) {
+                        await Chat.findOneAndUpdate(
+                            { messageId: aiResponseId },
+                            {
+                                $setOnInsert: {
+                                    sessionId,
+                                    messageId: aiResponseId,
+                                    userId: effectiveUserId,
+                                    role: 'AI',
+                                    content: '',
+                                    createdAt: new Date()
+                                },
+                                $set: {
+                                    tokensUsed: totalAiTokens,
+                                    aiResponses,
+                                    councilData: {
+                                        reviews: result.reviews.map(r => ({
+                                            reviewer: r.reviewerModel,
+                                            reviewerName: r.reviewerName,
+                                            rankings: r.review.rankings,
+                                            scores: r.review.scores,
+                                            strengths: r.review.strengths,
+                                            weaknesses: r.review.weaknesses
+                                        })),
+                                        chairmanModel: effectiveChairman,
+                                        finalAnswer: result.finalAnswer
+                                    }
+                                }
+                            },
+                            { upsert: true, new: true }
+                        );
+
+                        const totalTokens = promptTokens + totalAiTokens;
+                        updateUserTokenUsage(effectiveUserId, effectiveGuestId, totalTokens).catch(() => { });
+                        Session.findOneAndUpdate(
+                            { sessionId },
+                            { $inc: { totalTokensUsed: totalTokens }, updatedAt: new Date() }
+                        ).catch(() => { });
+                    } else {
+                        const session = sessionStorage.get(sessionId);
+                        if (session) {
+                            session.messages.push({ id: aiResponseId, role: 'AI', content: '', aiResponses, councilData: { finalAnswer: result.finalAnswer, reviews: result.reviews } });
+                        }
+                    }
+                } catch (err) {
+                    console.error('Council save error:', err);
+                }
+
+                io.to(sessionId).emit('all_responses_complete', { sessionId, modelsCompleted: aiResponses.length, mode: 'council' });
+            } catch (error) {
+                console.error('Council pipeline error:', error);
+                io.to(sessionId).emit('council:error', { stage: 0, error: error.message });
+                io.to(sessionId).emit('all_responses_complete', { sessionId, modelsCompleted: 0, mode: 'council' });
+            }
         });
 
         socket.on('leave_session', (sessionId) => {

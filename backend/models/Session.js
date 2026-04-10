@@ -6,6 +6,7 @@ const sessionSchema = new mongoose.Schema({
     // guestId: { type: String, index: true }, // Removed
     participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     title: { type: String, default: 'New Chat' },
+    mode: { type: String, enum: ['compare', 'council'], default: 'compare' },
     modelIds: [String],
     messageCount: { type: Number, default: 0 },
     totalTokensUsed: { type: Number, default: 0 },

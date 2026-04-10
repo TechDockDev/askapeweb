@@ -14,6 +14,19 @@ const chatSchema = new mongoose.Schema({
         tokensUsed: { type: Number, default: 0 },
         createdAt: { type: Date, default: Date.now }
     }],
+    // Council mode data (optional — only populated for council sessions)
+    councilData: {
+        reviews: [{
+            reviewer: String,
+            reviewerName: String,
+            rankings: [String],
+            scores: mongoose.Schema.Types.Mixed,
+            strengths: mongoose.Schema.Types.Mixed,
+            weaknesses: mongoose.Schema.Types.Mixed
+        }],
+        chairmanModel: String,
+        finalAnswer: String
+    },
     createdAt: { type: Date, default: Date.now }
 });
 

@@ -101,6 +101,12 @@ class SocketService {
         if (!this.socket) return;
         this.socket.emit('typing_stop', { sessionId, user });
     }
+
+    // Council mode: send message to council pipeline
+    public sendCouncilMessage(sessionId: string, message: string, modelIds: string[], chairmanModel: string, userId?: string, guestId?: string) {
+        if (!this.socket) return;
+        this.socket.emit('council_message', { sessionId, message, modelIds, chairmanModel, userId, guestId });
+    }
 }
 
 export const socketService = SocketService.getInstance();

@@ -13,6 +13,9 @@ import LogoutModal from './components/LogoutModal';
 import Sidebar from './components/Sidebar';
 import FirstChatSection from './components/FirstChatSection';
 import ResponseModal from './components/ResponseModal';
+import CouncilStageBar from './components/CouncilStageBar';
+import CouncilReviews from './components/CouncilReviews';
+import CouncilVerdict from './components/CouncilVerdict';
 
 
 interface ChatMessage {
@@ -51,7 +54,7 @@ function ChatContent() {
   const [allChats, setAllChats] = useState<ChatHistory[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>([
     'deepseek-ai/DeepSeek-V3',
-    'meta-llama/Llama-3.2-3B-Instruct',
+    'meta-llama/Llama-3.1-8B-Instruct',
     'Qwen/Qwen2.5-Coder-32B-Instruct'
   ]);
   const [prompt, setPrompt] = useState('');
@@ -71,6 +74,16 @@ function ChatContent() {
   const [selectedResponse, setSelectedResponse] = useState<{ content: string, modelName: string, question: string } | null>(null);
   const initialLoadDone = useRef(false);
 
+  // ─── Council Mode State ───────────────────────────────────
+  const [councilMode, setCouncilMode] = useState(false);
+  const [councilStage, setCouncilStage] = useState(0);
+  const [councilStageStatuses, setCouncilStageStatuses] = useState<{ [key: number]: 'pending' | 'started' | 'completed' }>({});
+  const [councilReviews, setCouncilReviews] = useState<any[]>([]);
+  const [councilVerdict, setCouncilVerdict] = useState('');
+  const [councilVerdictStreaming, setCouncilVerdictStreaming] = useState(false);
+  const [councilChairman, setCouncilChairman] = useState('');
+  const councilModeRef = useRef(false);
+
 
   // Refs
   const chatDisplayRef = useRef<HTMLDivElement>(null);
@@ -85,6 +98,10 @@ function ChatContent() {
   useEffect(() => {
     messagesRef.current = currentMessages;
   }, [currentMessages]);
+
+  useEffect(() => {
+    councilModeRef.current = councilMode;
+  }, [councilMode]);
 
   useEffect(() => {
     currentChatIdRef.current = currentChatId;
@@ -443,6 +460,63 @@ function ChatContent() {
         showToast(`Error: ${err.message}`);
         setIsGenerating(false);
       });
+
+      // ─── Council Mode Listeners ──────────────────────────
+      socket.on('council:stage', (data: { stage: number; status: string }) => {
+        setCouncilStage(data.stage);
+        setCouncilStageStatuses(prev => ({ ...prev, [data.stage]: data.status as any }));
+      });
+
+      socket.on('council:token', (data: { stage: number; modelId: string; modelName: string; chunk: string; fullContent: string }) => {
+        const { modelId, modelName, fullContent } = data;
+        setCurrentMessages((prevMessages) => {
+          const newMessages = [...prevMessages];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage) {
+            const responseIndex = lastMessage.responses.findIndex(r => r.model === modelId);
+            if (responseIndex !== -1) {
+              lastMessage.responses[responseIndex].content = fullContent;
+              lastMessage.responses[responseIndex].modelName = modelName;
+            } else {
+              lastMessage.responses.push({ model: modelId, modelName, content: fullContent, isComplete: false });
+            }
+          }
+          return newMessages;
+        });
+      });
+
+      socket.on('council:model_complete', (data: { modelId: string }) => {
+        setCurrentMessages((prevMessages) => {
+          const newMessages = [...prevMessages];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage) {
+            const resp = lastMessage.responses.find(r => r.model === data.modelId);
+            if (resp) resp.isComplete = true;
+          }
+          return newMessages;
+        });
+      });
+
+      socket.on('council:review', (data: any) => {
+        setCouncilReviews(prev => [...prev, data]);
+      });
+
+      socket.on('council:verdict_token', (data: { chunk: string; fullContent: string }) => {
+        setCouncilVerdictStreaming(true);
+        setCouncilVerdict(data.fullContent);
+      });
+
+      socket.on('council:done', (data: { finalAnswer: string; chairmanModel: string; reviews: any[] }) => {
+        setCouncilVerdict(data.finalAnswer);
+        setCouncilChairman(data.chairmanModel);
+        setCouncilVerdictStreaming(false);
+        setIsGenerating(false);
+        fetchSessions();
+      });
+
+      socket.on('council:error', (data: { stage: number; error: string }) => {
+        showToast(`Council error (Stage ${data.stage}): ${data.error}`);
+      });
     }
 
     // Restore chat from URL if available
@@ -671,6 +745,12 @@ function ChatContent() {
       return;
     }
 
+    // Council mode requires at least 2 models
+    if (councilMode && selectedModels.length < 2) {
+      showToast('Council mode requires at least 2 models');
+      return;
+    }
+
     let activeChatId = currentChatId;
     if (!activeChatId) {
       // Lazy init: Create session ID without clearing input
@@ -688,6 +768,16 @@ function ChatContent() {
     setPrompt('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'; // Reset height
+    }
+
+    // Reset council state if council mode
+    if (councilMode) {
+      setCouncilStage(0);
+      setCouncilStageStatuses({});
+      setCouncilReviews([]);
+      setCouncilVerdict('');
+      setCouncilVerdictStreaming(false);
+      setCouncilChairman(selectedModels[0]);
     }
 
     // Optimistically add user message to UI
@@ -708,7 +798,11 @@ function ChatContent() {
     const guestId = localStorage.getItem('askape_guest_id') || undefined;
     const userId = user?.id;
 
-    socketService.sendMessage(activeChatId, trimmedPrompt, selectedModels, userId, guestId);
+    if (councilMode) {
+      socketService.sendCouncilMessage(activeChatId, trimmedPrompt, selectedModels, selectedModels[0], userId, guestId);
+    } else {
+      socketService.sendMessage(activeChatId, trimmedPrompt, selectedModels, userId, guestId);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -806,24 +900,17 @@ function ChatContent() {
       {/* Main Content */}
       <div className="main-container">
         <div className="sticky-header flex items-center justify-between px-4 py-3 !bg-[#F6F6F6] ">
-          {/* Left Side: Model Selector - w-1/3 */}
-          <div className="w-1/3 flex justify-start">
+          {/* Left Side: Model Selector + Council Toggle */}
+          <div className="w-1/3 flex justify-start items-center gap-3">
             <div className="model-selector relative z-50">
               <button
                 className={`flex items-center gap-2 bg-transparent hover:bg-white/5 !px-3 !py-2 rounded-lg text-gray-300 text-md transition-all border ${isModelDropdownOpen ? 'border-lime-500/50 bg-lime-500/10 text-lime-400' : ' hover:border-gray-600'}`}
                 onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
               >
                 <div className="flex items-center gap-2">
-                  {/* {selectedModels.length > 0 && (
-                    <div className="flex -space-x-1">
-                      {selectedModels.slice(0, 2).map(m => (
-                        <div key={m} className="!w-5 !h-5 rounded-full bg-[#DFFF00] ring-1 ring-[#1e1e1e]" />
-                      ))}
-                    </div>
-                  )} */}
                   <span className="text-black font-bold">{selectedModels.length > 0 ? `${selectedModels.length} Models` : 'Select Model'}</span>
                 </div>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-chevron-down-icon lucide-chevron-down"><path d="m6 9 6 6 6-6" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
               </button>
 
               {isModelDropdownOpen && (
@@ -835,7 +922,7 @@ function ChatContent() {
                     </div>
                     {[
                       { id: 'deepseek', value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
-                      { id: 'llama', value: 'meta-llama/Llama-3.2-3B-Instruct', label: 'Llama 3.2' },
+                      { id: 'llama', value: 'meta-llama/Llama-3.1-8B-Instruct', label: 'Llama 3.1 8B' },
                       { id: 'qwen', value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen Coder' }
                     ].map(model => (
                       <div
@@ -864,6 +951,20 @@ function ChatContent() {
                   </div>
                 </>
               )}
+            </div>
+
+            {/* Council Mode Toggle */}
+            <div
+              className="council-toggle-wrapper"
+              onClick={() => setCouncilMode(!councilMode)}
+              title={councilMode ? 'Switch to Compare mode' : 'Switch to Council mode'}
+            >
+              <div className={`council-toggle ${councilMode ? 'active' : ''}`}>
+                <div className="council-toggle-slider" />
+              </div>
+              <span className={`council-toggle-label ${councilMode ? 'active' : ''}`}>
+                {councilMode ? '⚖️ Council' : '🔀 Compare'}
+              </span>
             </div>
           </div>
 
@@ -1028,6 +1129,21 @@ function ChatContent() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Council UI — shows after response cards */}
+                  {councilMode && (councilStage > 0 || councilVerdictStreaming || councilVerdict) && (
+                    <div className="council-section">
+                      <CouncilStageBar currentStage={councilStage} stageStatuses={councilStageStatuses} />
+                      {councilReviews.length > 0 && <CouncilReviews reviews={councilReviews} />}
+                      {(councilVerdict || councilVerdictStreaming) && (
+                        <CouncilVerdict
+                          content={councilVerdict}
+                          chairmanModel={councilChairman}
+                          isStreaming={councilVerdictStreaming}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               ))
             )}
