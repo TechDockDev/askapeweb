@@ -8,10 +8,10 @@ export const AVAILABLE_MODELS = [
         isDefault: true
     },
     {
-        id: 'meta-llama/Llama-3.2-3B-Instruct',
-        name: 'Llama 3.2',
+        id: 'meta-llama/Llama-3.1-8B-Instruct',
+        name: 'Llama 3.1 8B',
         displayName: 'Llama',
-        description: 'Meta\'s latest instruction-tuned model',
+        description: 'Meta\'s powerful instruction-tuned model',
         provider: 'Meta',
         isDefault: true
     },
